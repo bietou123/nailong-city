@@ -1,9 +1,9 @@
 {
   "name": "nailong-city",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "private": true,
-  "description": "Original third-person city sandbox with a cheerful yellow dragon.",
+  "description": "Third-person open-city crime sandbox starring a cheerful yellow dragon, with driving, gunplay, police chases, shops, day-night cycle and a five-mission story.",
   "author": "Nailong City contributors",
   "main": "electron/main.cjs",
   "scripts": {

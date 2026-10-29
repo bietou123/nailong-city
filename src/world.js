@@ -244,11 +244,14 @@ function park(scene, rng, x, z, landmark = false) {
   }
 }
 
-function streetLamp(scene, x, z) {
+function streetLamp(scene, x, z, lamps) {
   cube(scene, materials.metal, x, 3.65, z, 0.18, 7.3, 0.18);
   cube(scene, materials.metal, x + 0.85, 7.3, z, 1.82, 0.14, 0.16);
-  cube(scene, mat('#f7e5b2', 0.25), x + 1.55, 7.19, z, 0.67, 0.12, 0.44);
+  const shade = cube(scene, new THREE.MeshStandardMaterial({ color: '#f7e5b2',
+    roughness: 0.25, emissive: '#ffd98a', emissiveIntensity: 0.08 }),
+  x + 1.55, 7.19, z, 0.67, 0.12, 0.44);
   cube(scene, materials.dark, x, 0.29, z, 0.44, 0.58, 0.44);
+  lamps.push({ material: shade.material, x: x + 1.4, y: 6.4, z });
 }
 
 function streetFurniture(scene, x, z, rng) {
@@ -352,7 +355,7 @@ function roadMarkings(scene) {
   }
 }
 
-function makeCar(scene, color, x, z, yaw = 0, type = 'city') {
+export function makeCar(scene, color, x, z, yaw = 0, type = 'city') {
   const group = new THREE.Group();
   const paint = mat(color, 0.26, 0.28);
   const tires = mat('#202b32');
@@ -416,6 +419,8 @@ function makeCar(scene, color, x, z, yaw = 0, type = 'city') {
   }
   group.userData.wheels = wheels;
   group.userData.brakeLights = brakeLights;
+  group.userData.headlights = headlights;
+  group.userData.type = type;
   group.position.set(x, 0, z);
   group.rotation.y = yaw;
   scene.add(group);
@@ -481,6 +486,7 @@ function dragon(scene) {
     spike.rotation.x = -0.62;
   }
   group.userData.rig = { head, arms, legs, tail };
+  group.userData.materials = { body: yellow, belly: pale, accent: orange };
   scene.add(group);
   return group;
 }
@@ -488,6 +494,8 @@ function dragon(scene) {
 export function createWorld(scene, physics) {
   const rng = randomGenerator(20261029);
   const windows = [];
+  const lamps = [];
+  const windowMaterials = [];
   const surfaces = createSurfaces();
   const roadVertical = new THREE.MeshStandardMaterial({ map: surfaces.roadVertical,
     color: '#f6f7f5', roughness: 1 });
@@ -535,7 +543,7 @@ export function createWorld(scene, physics) {
             height, district, windows, surfaces);
         }
       }
-      if ((i + j) % 3 === 0) streetLamp(scene, x - 27, z - 27);
+      if ((i + j) % 3 === 0) streetLamp(scene, x - 27, z - 27, lamps);
       if (rng() > 0.56) tree(scene, x - 25, z + 25, z < -140);
       if (Math.abs(i) < 3 && Math.abs(j) < 3 && (i + j) % 2 === 0)
         streetFurniture(scene, x - 19, z + 25, rng);
@@ -564,6 +572,7 @@ export function createWorld(scene, physics) {
       const glass = new THREE.MeshStandardMaterial({ map: surfaces.windows[lit ? 1 : 0],
         color: '#ffffff', roughness: 0.23, metalness: 0.14, side: THREE.DoubleSide,
         emissive: lit ? '#bd824c' : '#193942', emissiveIntensity: lit ? 0.19 : 0.05 });
+      if (lit) windowMaterials.push(glass);
       const geometry = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1),
         glass, instances.length);
       instances.forEach((window, index) => {
@@ -595,7 +604,8 @@ export function createWorld(scene, physics) {
     const [x, z, yaw] = carSpots[index];
     const car = { mesh: makeCar(scene, colors[index % colors.length], x, z, yaw,
       index === 6 ? 'van' : 'city'), x, z, yaw, speed: 0,
-      name: index === 6 ? '海风货车' : '城市小车', body: null };
+      name: index === 6 ? '海风货车' : '城市小车', body: null,
+      durability: 100, maxDurability: 100, burning: 0, dead: false };
     const body = new CANNON.Body({ mass: 0,
       shape: new CANNON.Box(new CANNON.Vec3(1.3, 0.9, 2.3)) });
     body.position.set(x, 0.9, z);
@@ -649,5 +659,5 @@ export function createWorld(scene, physics) {
       speed: 0.65 + rng() * 0.45, stunned: 0 });
   }
   const actor = dragon(scene);
-  return { actor, cars, traffic, people, garage: GARAGE };
+  return { actor, cars, traffic, people, garage: GARAGE, lamps, windowMaterials };
 }

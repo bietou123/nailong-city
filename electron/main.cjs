@@ -16,7 +16,7 @@ function createWindow() {
     backgroundColor: '#a9dce1',
     show: !smokeTest,
     autoHideMenuBar: true,
-    title: '奶龙：城市漫游',
+    title: '奶龙之城：犯罪都市',
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
