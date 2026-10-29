@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#b4dfe4" />
+    <link rel="icon" href="data:," />
+    <title>奶龙：城市漫游</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene" aria-label="奶龙城市游戏画面"></canvas>
+      <div id="loading">奶龙正在进城...</div>
+      <div id="interface" class="hidden">
+        <header class="topbar">
+          <div class="brand"><span class="brand-symbol">N.</span><span>奶龙<span class="brand-quiet"> / CITY STORIES</span></span></div>
+          <div class="topbar-actions">
+            <span id="district" class="district">中心区 · 日间</span>
+            <button id="map-toggle" class="icon-button" title="地图 (M)" aria-label="地图"><i data-lucide="map"></i></button>
+            <button id="pause-toggle" class="icon-button" title="暂停 (Esc)" aria-label="暂停"><i data-lucide="pause"></i></button>
+          </div>
+        </header>
+        <aside class="mission" aria-live="polite">
+          <div class="panel-caption"><span class="live-dot"></span> 当前委托 <span id="mission-index">01 / 02</span></div>
+          <h1 id="mission-title">街角的甜点</h1>
+          <p id="mission-description">前往甜甜圈店领取包裹</p>
+          <div class="mission-footer"><span id="mission-distance">目的地 0 m</span><span id="mission-timer"></span></div>
+        </aside>
+        <aside class="status">
+          <div class="money" id="money">$ 0000</div>
+          <div class="wanted" id="wanted" aria-label="通缉等级">☆☆☆☆☆</div>
+          <div class="health-track"><span id="health-fill"></span></div>
+          <div class="health-label"><span>活力</span><span id="health-value">100</span></div>
+        </aside>
+        <div class="bottom-left">
+          <div class="minimap-frame" id="minimap-frame"><canvas id="minimap" width="320" height="320" aria-label="小地图"></canvas><span class="map-north">N</span></div>
+          <div class="location"><span class="location-marker"></span><span id="street-name">晴日大道</span></div>
+        </div>
+        <div class="bottom-right">
+          <div id="vehicle-info" class="vehicle-info hidden"><span class="speed-value" id="speed">00</span><span class="speed-unit">KM/H</span><span id="vehicle-name">城市小车</span></div>
+          <div id="interaction" class="interaction hidden"><kbd>E</kbd><span id="interaction-label">进入车辆</span></div>
+        </div>
+        <div id="toast" class="toast hidden" role="status"></div>
+        <div id="crosshair" class="crosshair hidden" aria-hidden="true"></div>
+        <div class="mobile-controls" id="mobile-controls">
+          <div id="joystick" class="joystick"><span id="joystick-knob"></span></div>
+          <div class="mobile-actions">
+            <button id="touch-fire" title="发射彩弹" aria-label="发射彩弹"><i data-lucide="crosshair"></i></button>
+            <button id="touch-jump" title="跳跃或刹车" aria-label="跳跃或刹车"><i data-lucide="arrow-up"></i></button>
+            <button id="touch-enter" title="上车或下车" aria-label="上车或下车"><i data-lucide="car-front"></i></button>
+          </div>
+        </div>
+        <div id="pause-screen" class="overlay hidden">
+          <section class="dialog" aria-label="暂停菜单">
+            <div class="dialog-overline">NAILONG CITY / PAUSED</div>
+            <h2>稍事休息</h2>
+            <p id="pause-progress">城市故事正在等你。</p>
+            <div class="dialog-actions">
+              <button id="resume" class="primary-action"><i data-lucide="play"></i>继续游戏</button>
+              <button id="restart" class="secondary-action"><i data-lucide="rotate-ccw"></i>重新开始</button>
+            </div>
+            <div class="settings-row"><label for="volume">环境音量</label><input id="volume" type="range" min="0" max="100" value="35" /></div>
+            <div class="settings-row"><label for="quality">画面质量</label><select id="quality"><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></div>
+            <div class="controls-guide">WASD 移动 / 驾驶　·　鼠标转向　·　E 上下车　·　Shift 奔跑　·　空格 跳跃 / 刹车　·　点击 发射彩弹　·　M 地图　·　Esc 暂停</div>
+          </section>
+        </div>
+        <div id="full-map" class="overlay hidden"><section class="map-dialog"><div class="map-header"><div><span class="dialog-overline">EXPLORE THE CITY</span><h2>城市地图</h2></div><button id="map-close" class="icon-button" aria-label="关闭地图" title="关闭地图"><i data-lucide="x"></i></button></div><canvas id="large-map" width="900" height="900"></canvas><div class="map-legend"><span><b class="legend-player"></b> 奶龙</span><span><b class="legend-goal"></b> 委托地点</span><span><b class="legend-garage"></b> 修理站</span></div></section></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
