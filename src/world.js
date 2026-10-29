@@ -486,6 +486,30 @@ function busStop(scene, x, z) {
     3.1, 0.77, -Math.PI / 2);
 }
 
+let markingTexture;
+function wornMarking() {
+  if (markingTexture) return markingTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 128, 128);
+  const next = randomGenerator(4821);
+  for (let i = 0; i < 900; i++) {
+    ctx.globalAlpha = 0.05 + next() * 0.16;
+    ctx.fillStyle = next() > 0.5 ? '#8d8b82' : '#5c5a52';
+    ctx.fillRect(next() * 128, next() * 128, 1 + next() * 3, 1 + next() * 2);
+  }
+  ctx.globalAlpha = 0.25;
+  ctx.strokeStyle = '#7c7a70';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, 125, 125);
+  ctx.globalAlpha = 1;
+  markingTexture = new THREE.CanvasTexture(canvas);
+  markingTexture.colorSpace = THREE.SRGBColorSpace;
+  return markingTexture;
+}
+
 function roadMarkings(scene) {
   const dashes = [];
   const crossings = [];
@@ -524,8 +548,8 @@ function roadMarkings(scene) {
     [stops, '#d6d0ba', 0.12], [edges, '#c2c6b8', 0.113],
   ]) {
     const instances = new THREE.InstancedMesh(plane,
-      new THREE.MeshStandardMaterial({ color, roughness: 0.92, metalness: 0,
-        side: THREE.DoubleSide }), positions.length);
+      new THREE.MeshStandardMaterial({ color, map: wornMarking(), roughness: 0.92,
+        metalness: 0, side: THREE.DoubleSide }), positions.length);
     positions.forEach(([x, z, width, depth], index) => {
       dummy.position.set(x, height, z);
       dummy.rotation.set(-Math.PI / 2, 0, 0);
@@ -693,15 +717,43 @@ export function makeCar(scene, color, x, z, yaw = 0, type = 'city') {
   return group;
 }
 
+let fabricTexture;
+function fabricNoise() {
+  if (fabricTexture) return fabricTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 256, 256);
+  const next = randomGenerator(77031);
+  for (let i = 0; i < 24000; i++) {
+    const shade = Math.floor(223 + next() * 32);
+    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+    ctx.fillRect(next() * 256, next() * 256, 1 + next() * 2, 1 + next() * 2);
+  }
+  fabricTexture = new THREE.CanvasTexture(canvas);
+  fabricTexture.wrapS = fabricTexture.wrapT = THREE.RepeatWrapping;
+  fabricTexture.repeat.set(3, 3);
+  fabricTexture.colorSpace = THREE.SRGBColorSpace;
+  return fabricTexture;
+}
+
 function dragon(scene) {
   const group = new THREE.Group();
-  const yellow = mat('#fbd340', 0.52);
-  const pale = mat('#ffefae', 0.72);
+  const cloth = fabricNoise();
+  const yellow = mat('#fbd340', 0.64);
+  yellow.map = cloth;
+  yellow.bumpMap = cloth;
+  yellow.bumpScale = 0.04;
+  const pale = mat('#ffefae', 0.74);
+  pale.map = cloth;
+  pale.bumpMap = cloth;
+  pale.bumpScale = 0.03;
   const orange = mat('#eb9a54', 0.64);
   const blush = mat('#ed9990');
   const black = mat('#20383a', 0.19);
   function sphere(parent, material, x, y, z, sx, sy, sz) {
-    const part = mesh(new THREE.SphereGeometry(1, 24, 16), material, parent, x, y, z);
+    const part = mesh(new THREE.SphereGeometry(1, 32, 22), material, parent, x, y, z);
     part.scale.set(sx, sy, sz);
     part.castShadow = true;
     return part;
@@ -720,7 +772,7 @@ function dragon(scene) {
     sphere(head, pale, side * 0.37 - 0.035, 0.25, 0.93, 0.043, 0.06, 0.024);
     sphere(head, blush, side * 0.67, -0.1, 0.61, 0.17, 0.09, 0.05);
     sphere(head, yellow, side * 0.79, 0.03, -0.25, 0.22, 0.3, 0.22);
-    const horn = mesh(new THREE.ConeGeometry(0.23, 0.75, 9), pale,
+    const horn = mesh(new THREE.ConeGeometry(0.23, 0.75, 12), pale,
       head, side * 0.54, 0.89, -0.2);
     horn.rotation.z = side * 0.23;
   }

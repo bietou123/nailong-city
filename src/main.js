@@ -81,6 +81,9 @@ sun.shadow.camera.near = 10;
 sun.shadow.camera.far = 360;
 sun.shadow.bias = -0.001;
 scene.add(sun);
+const fill = new THREE.DirectionalLight('#8fb6ff', 0.45);
+fill.position.set(120, 70, -160);
+scene.add(fill);
 const atmosphere = createAtmosphere(scene);
 
 const physics = new CANNON.World({ gravity: new CANNON.Vec3(0, -24, 0) });
