@@ -26,30 +26,30 @@ export function createDayNight({ scene, sun, hemisphere, fog, atmosphere, lamps,
     const angle = (hours - 6) / 24 * Math.PI * 2;
     const height = Math.sin(angle);
     const day = THREE.MathUtils.clamp((height + 0.26) / 0.56, 0, 1);
-    const sunset = Math.max(0, 1 - Math.abs(height) * 2.8) * (1 - Math.max(0, -height) * 1.2);
+    const sunset = Math.max(0, 1 - Math.abs(height) * 2.2) * (1 - Math.max(0, -height) * 1.2);
     const night = 1 - day;
 
     sun.position.set(playerPosition.x + Math.cos(angle) * 140,
       Math.max(18 + night * 70, height * 150), playerPosition.z + Math.sin(angle) * 100);
     sun.target.position.set(playerPosition.x, 0, playerPosition.z);
     sun.target.updateMatrixWorld();
-    sun.intensity = 1.6 + day * 1.8;
+    sun.intensity = 1.35 + day * 2.75;
     sunColor.copy(COLORS.nightSun).lerp(COLORS.daySun, day);
     if (sunset > 0.05) sunColor.lerp(COLORS.sunsetSun, Math.min(1, sunset * 0.9));
     sun.color.copy(sunColor);
 
-    hemisphere.intensity = 3.4 - day * 2.38;
+    hemisphere.intensity = 2.8 - day * 2.15;
     hemisphere.color.copy(COLORS.nightHorizon).lerp(COLORS.dayHorizon, day);
     hemisphere.groundColor.setRGB(0.05 + day * 0.24, 0.055 + day * 0.23,
       0.06 + day * 0.19);
 
     mixColor.copy(COLORS.nightFog).lerp(COLORS.dayFog, day);
-    if (sunset > 0.04) mixColor.lerp(COLORS.sunsetFog, Math.min(1, sunset * 0.55));
+    if (sunset > 0.04) mixColor.lerp(COLORS.sunsetFog, Math.min(1, sunset * 0.8));
     fog.color.copy(mixColor);
     scene.background.copy(mixColor);
-    fog.near = 120 - night * 40;
-    fog.far = 620 - night * 230;
-    scene.environmentIntensity = 0.2 + day * 0.36;
+    fog.near = 130 - night * 30;
+    fog.far = 560 - night * 200;
+    scene.environmentIntensity = 0.14 + day * 0.26;
 
     const lampGlow = night * 3.0;
     for (const lamp of lamps) lamp.material.emissiveIntensity = 0.08 + lampGlow;

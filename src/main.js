@@ -18,9 +18,9 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('scene');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#acdce4');
-scene.fog = new THREE.Fog('#b3cdd3', 155, 660);
+scene.fog = new THREE.Fog('#b3cdd3', 130, 560);
 
-const camera = new THREE.PerspectiveCamera(62, 1, 0.12, 950);
+const camera = new THREE.PerspectiveCamera(58, 1, 0.12, 950);
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true,
@@ -31,7 +31,7 @@ try {
 }
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.32;
+renderer.toneMappingExposure = 1.16;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const postfx = createPostFX(renderer, scene, camera);

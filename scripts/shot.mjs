@@ -46,7 +46,7 @@ try {
   await page.screenshot({ path: path.join(root, 'screenshots', 'detail.png'),
     clip: { x: 320, y: 160, width: 640, height: 360 } });
   console.log('saved high.png, detail.png');
-  await page.evaluate(() => window.__NAILONG_DEBUG__?.setHour(18.6));
+  await page.evaluate(() => window.__NAILONG_DEBUG__?.setHour(18.0));
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(root, 'screenshots', 'dusk.png') });
   await page.evaluate(() => window.__NAILONG_DEBUG__?.setHour(21.6));

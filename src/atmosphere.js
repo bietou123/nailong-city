@@ -26,14 +26,14 @@ export function createAtmosphere(scene) {
         void main() {
           vec3 direction = normalize(vDirection);
           float altitude = pow(clamp((direction.y + 0.08) / 0.7, 0.0, 1.0), 0.75);
-          vec3 horizon = mix(vec3(0.028, 0.045, 0.075), vec3(0.50, 0.62, 0.70), uDay);
-          horizon = mix(horizon, vec3(0.95, 0.44, 0.22), uSunset * 0.7);
-          vec3 zenith = mix(vec3(0.008, 0.014, 0.035), vec3(0.07, 0.24, 0.48), uDay);
+          vec3 horizon = mix(vec3(0.028, 0.045, 0.075), vec3(0.44, 0.56, 0.64), uDay);
+          horizon = mix(horizon, vec3(0.95, 0.44, 0.22), uSunset * 0.85);
+          vec3 zenith = mix(vec3(0.008, 0.014, 0.035), vec3(0.045, 0.19, 0.43), uDay);
           zenith = mix(zenith, vec3(0.36, 0.19, 0.22), uSunset * 0.35);
           vec3 color = mix(horizon, zenith, altitude);
           float facingSun = max(dot(direction, normalize(uSunDir)), 0.0);
           float haze = exp(-max(direction.y, 0.0) * 7.0);
-          color += vec3(0.10, 0.09, 0.075) * haze * uDay;
+          color += vec3(0.13, 0.115, 0.095) * haze * uDay;
           color += vec3(0.42, 0.28, 0.16) * pow(facingSun, 5.0) * uDay * 0.7;
           color += vec3(1.0, 0.76, 0.48) * pow(facingSun, 380.0) * uDay * 1.4;
           gl_FragColor = vec4(color, 1.0);
@@ -101,7 +101,7 @@ export function createAtmosphere(scene) {
       const brightness = 0.13 + day * 0.87;
       cloudMaterial.color.setRGB(0.96 * brightness, 0.945 * brightness,
         0.925 * brightness);
-      if (sunset > 0.05) cloudMaterial.color.lerp(cloudTint, sunset * 0.4);
+      if (sunset > 0.05) cloudMaterial.color.lerp(cloudTint, sunset * 0.55);
       cloudMaterial.opacity = 0.12 + day * 0.4;
       clouds.forEach((cloud, index) => {
         cloud.position.x += Math.sin(index + hours * 0.4) * 0.004;

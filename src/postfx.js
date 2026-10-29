@@ -9,10 +9,10 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     time: { value: 0 },
-    vignette: { value: 0.55 },
+    vignette: { value: 0.6 },
     grain: { value: 0.012 },
-    saturation: { value: 1.12 },
-    contrast: { value: 1.06 },
+    saturation: { value: 1.06 },
+    contrast: { value: 1.12 },
     shadowTint: { value: new THREE.Color('#7d94ad') },
     highlightTint: { value: new THREE.Color('#ffd8ae') },
     shadowAmount: { value: 0.07 },
@@ -60,7 +60,7 @@ const GradeShader = {
       float highlightMask = smoothstep(0.55, 1.0, luma);
       color = mix(color, color * shadowTint * 1.4, shadowMask * shadowAmount);
       color = mix(color, color * highlightTint, highlightMask * highlightAmount);
-      color = color * 0.965 + 0.016;
+      color = color * 0.988 + 0.004;
 
       float dist = distance(vUv, vec2(0.5));
       float edge = smoothstep(0.36, 0.88, dist);
@@ -75,7 +75,7 @@ const GradeShader = {
 export function createPostFX(renderer, scene, camera) {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.24, 0.5, 0.9);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.3, 0.55, 0.86);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
   const grade = new ShaderPass(GradeShader);
