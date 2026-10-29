@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu } = require('electron');
 const path = require('node:path');
 const smokeTest = process.argv.includes('--smoke-test');
+const debugMode = process.argv.includes('--gamedebug');
 
 if (smokeTest) {
   app.commandLine.appendSwitch('use-angle', 'swiftshader');
@@ -35,7 +36,8 @@ function createWindow() {
     window.webContents.on('did-finish-load', verify);
     window.webContents.on('did-fail-load', () => app.exit(1));
   }
-  window.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  window.loadFile(path.join(__dirname, '..', 'dist', 'index.html'),
+    debugMode ? { query: { debug: '1' } } : undefined);
 }
 
 app.whenReady().then(() => {

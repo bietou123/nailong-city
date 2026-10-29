@@ -1,6 +1,6 @@
 {
   "name": "nailong-city",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "private": true,
   "description": "Third-person open-city crime sandbox starring a cheerful yellow dragon, with driving, gunplay, police chases, shops, day-night cycle and a five-mission story.",
@@ -12,7 +12,8 @@
     "start": "electron .",
     "dist": "npm run build && electron-builder --win portable --x64",
     "test": "node --test tests/*.test.mjs",
-    "test:visual": "node scripts/smoke.mjs"
+    "test:visual": "node scripts/smoke.mjs",
+    "test:electron": "node scripts/electron-check.mjs"
   },
   "dependencies": {
     "cannon-es": "^0.20.0",

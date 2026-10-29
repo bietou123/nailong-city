@@ -969,8 +969,11 @@ function vehicleHitsPedestrians() {
 }
 
 function movePlayer(dt) {
-  const horizontal = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + joystick.x;
-  const vertical = Number(keys.has('KeyW')) - Number(keys.has('KeyS')) - joystick.y;
+  const arrowTurn = Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'));
+  const horizontal = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) +
+    (state.currentCar ? arrowTurn : 0) + joystick.x;
+  const vertical = Number(keys.has('KeyW')) - Number(keys.has('KeyS')) +
+    Number(keys.has('ArrowUp')) - Number(keys.has('ArrowDown')) - joystick.y;
   if (state.currentCar) {
     const car = state.currentCar;
     const throttle = THREE.MathUtils.clamp(vertical, -1, 1);
@@ -1266,11 +1269,11 @@ function updateWorld(dt) {
   }
   dayNight.update(dt, { x: position.x, y: 0, z: position.z }, camera.position);
   const turnKey = Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'));
-  if (turnKey) state.cameraYaw -= turnKey * dt * 1.8;
-  const pitchKey = Number(keys.has('ArrowDown')) - Number(keys.has('ArrowUp'));
+  if (turnKey && !state.currentCar) state.cameraYaw -= turnKey * dt * 2.2;
+  const pitchKey = Number(keys.has('PageDown')) - Number(keys.has('PageUp'));
   if (pitchKey) state.cameraPitch = THREE.MathUtils.clamp(
     state.cameraPitch - pitchKey * dt * 0.6, -0.35, 0.55);
-  if (turnKey || pitchKey) state.cameraKeyAt = state.elapsed;
+  if ((turnKey && !state.currentCar) || pitchKey) state.cameraKeyAt = state.elapsed;
   moveCamera(dt);
   if (state.elapsed >= state.nextSave) {
     state.nextSave = state.elapsed + 4;
@@ -1580,6 +1583,7 @@ function setupControls() {
   canvas.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'touch' || state.paused || state.mapOpen ||
         state.shopOpen) return;
+    startAudio();
     if (!document.pointerLockElement) {
       event.preventDefault();
       canvas.requestPointerLock?.();
@@ -1599,6 +1603,7 @@ function setupControls() {
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   document.addEventListener('pointerlockchange', () => {
     if (!document.pointerLockElement) state.aiming = false;
+    else if (audio.context) audio.ui('success');
   });
   document.addEventListener('mousemove', (event) => {
     if (document.pointerLockElement === canvas && !state.paused &&
@@ -1685,7 +1690,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
   window.__NAILONG_DEBUG__ = {
     snapshot: () => ({ x: getPosition().x, z: getPosition().z,
       job: state.progress.job, step: state.progress.step,
