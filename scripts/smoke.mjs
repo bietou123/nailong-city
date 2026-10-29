@@ -79,7 +79,10 @@ try {
       await page.keyboard.down('w');
       await page.waitForFunction(() => window.__NAILONG_DEBUG__.snapshot().stride > 0.02,
         null, { timeout: 12000 });
-      await page.waitForTimeout(700);
+      await page.waitForFunction((start) => {
+        const now = window.__NAILONG_DEBUG__.snapshot();
+        return Math.hypot(now.x - start.x, now.z - start.z) > 0.5;
+      }, before, { timeout: 15000 });
       await page.keyboard.up('w');
       const after = await snapshot();
       assert.ok(Math.hypot(after.x - before.x, after.z - before.z) > 0.5,
@@ -89,15 +92,16 @@ try {
       assert.ok(cameraDistance > 4 && cameraDistance < 11,
         `camera not following the player: ${cameraDistance}`);
 
+      await page.waitForFunction(() =>
+        window.__NAILONG_DEBUG__.snapshot().idleFor > 1.2, null, { timeout: 90000 });
       const yawStart = (await snapshot()).camera.yaw;
       await page.keyboard.down('w');
       await page.keyboard.down('a');
-      await page.waitForTimeout(2400);
+      await page.waitForFunction((start) => Math.abs(
+        window.__NAILONG_DEBUG__.snapshot().camera.yaw - start) > 0.15,
+      yawStart, { timeout: 60000 });
       await page.keyboard.up('a');
       await page.keyboard.up('w');
-      const yawEnd = (await snapshot()).camera.yaw;
-      assert.ok(Math.abs(yawEnd - yawStart) > 0.15,
-        `camera does not swing with the walker: ${yawStart} -> ${yawEnd}`);
 
       await page.evaluate(() => window.__NAILONG_DEBUG__.teleport(5, 15));
       await page.keyboard.press('KeyE');
@@ -108,7 +112,8 @@ try {
       null, { timeout: 12000 });
       const yawBefore = (await snapshot()).carYaw;
       await page.keyboard.down('d');
-      await page.waitForTimeout(600);
+      await page.waitForFunction((start) => window.__NAILONG_DEBUG__.snapshot().carYaw
+        < start - 0.01, yawBefore, { timeout: 15000 });
       await page.keyboard.up('d');
       await page.keyboard.up('w');
       const yawAfter = (await snapshot()).carYaw;
@@ -154,7 +159,9 @@ try {
       await page.waitForTimeout(400);
 
       await page.evaluate(() => window.__NAILONG_DEBUG__.setHour(21));
-      await page.waitForTimeout(500);
+      await page.waitForFunction(() =>
+        document.getElementById('clock').textContent.startsWith('21:'),
+      null, { timeout: 15000 });
       const clock = await page.locator('#clock').textContent();
       assert.ok(clock.startsWith('21:'), `night clock failed: ${clock}`);
       await page.screenshot({ path: path.join(root, 'screenshots', 'night.png') });

@@ -25,15 +25,17 @@ export function createAtmosphere(scene) {
         varying vec3 vDirection;
         void main() {
           vec3 direction = normalize(vDirection);
-          float altitude = smoothstep(-0.12, 0.76, direction.y);
-          vec3 horizon = mix(vec3(0.035, 0.07, 0.13), vec3(0.43, 0.66, 0.74), uDay);
-          horizon = mix(horizon, vec3(0.86, 0.44, 0.28), uSunset * 0.68);
-          vec3 zenith = mix(vec3(0.01, 0.02, 0.06), vec3(0.12, 0.35, 0.56), uDay);
-          zenith = mix(zenith, vec3(0.40, 0.20, 0.22), uSunset * 0.4);
+          float altitude = pow(clamp((direction.y + 0.08) / 0.7, 0.0, 1.0), 0.75);
+          vec3 horizon = mix(vec3(0.028, 0.045, 0.075), vec3(0.50, 0.62, 0.70), uDay);
+          horizon = mix(horizon, vec3(0.95, 0.44, 0.22), uSunset * 0.7);
+          vec3 zenith = mix(vec3(0.008, 0.014, 0.035), vec3(0.07, 0.24, 0.48), uDay);
+          zenith = mix(zenith, vec3(0.36, 0.19, 0.22), uSunset * 0.35);
           vec3 color = mix(horizon, zenith, altitude);
           float facingSun = max(dot(direction, normalize(uSunDir)), 0.0);
-          color += vec3(0.24, 0.15, 0.08) * pow(facingSun, 8.0) * uDay;
-          color += vec3(0.9, 0.68, 0.42) * pow(facingSun, 420.0) * uDay;
+          float haze = exp(-max(direction.y, 0.0) * 7.0);
+          color += vec3(0.10, 0.09, 0.075) * haze * uDay;
+          color += vec3(0.42, 0.28, 0.16) * pow(facingSun, 5.0) * uDay * 0.7;
+          color += vec3(1.0, 0.76, 0.48) * pow(facingSun, 380.0) * uDay * 1.4;
           gl_FragColor = vec4(color, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -66,8 +68,9 @@ export function createAtmosphere(scene) {
   scene.add(stars);
 
   const clouds = [];
-  const cloudMaterial = new THREE.MeshBasicMaterial({ color: '#f9f4e8', transparent: true,
-    opacity: 0.58, depthWrite: false, fog: false });
+  const cloudMaterial = new THREE.MeshBasicMaterial({ color: '#e8e7e1', transparent: true,
+    opacity: 0.5, depthWrite: false, fog: false });
+  const cloudTint = new THREE.Color('#ffb27a');
   const cloudGeometry = new THREE.SphereGeometry(1, 12, 7);
   for (let index = 0; index < 14; index++) {
     const group = new THREE.Group();
@@ -95,10 +98,11 @@ export function createAtmosphere(scene) {
       uniforms.uSunset.value = sunset;
       uniforms.uSunDir.value.set(Math.cos(angle), Math.sin(angle), 0.55).normalize();
       starMaterial.opacity = (1 - day) * 0.9;
-      const brightness = 0.16 + day * 0.84;
-      cloudMaterial.color.setRGB(0.98 * brightness, 0.955 * brightness,
-        0.91 * brightness);
-      cloudMaterial.opacity = 0.2 + day * 0.38;
+      const brightness = 0.13 + day * 0.87;
+      cloudMaterial.color.setRGB(0.96 * brightness, 0.945 * brightness,
+        0.925 * brightness);
+      if (sunset > 0.05) cloudMaterial.color.lerp(cloudTint, sunset * 0.4);
+      cloudMaterial.opacity = 0.12 + day * 0.4;
       clouds.forEach((cloud, index) => {
         cloud.position.x += Math.sin(index + hours * 0.4) * 0.004;
       });

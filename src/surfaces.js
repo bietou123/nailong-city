@@ -27,13 +27,13 @@ function grain(ctx, size, seed, count, colors) {
 }
 
 const asphaltCanvas = (ctx, size) => {
-  ctx.fillStyle = '#535d60';
+  ctx.fillStyle = '#555c60';
   ctx.fillRect(0, 0, size, size);
-  grain(ctx, size, 9802, 4800, ['#4f585b', '#626d70', '#596265', '#4b5558']);
+  grain(ctx, size, 9802, 5600, ['#4b5256', '#5d6468', '#575e62', '#464c50', '#666d70']);
   const next = random(651);
   ctx.lineWidth = 1;
   for (let i = 0; i < 11; i++) {
-    ctx.strokeStyle = i % 3 ? '#313e43' : '#7c898b';
+    ctx.strokeStyle = i % 3 ? '#2c3437' : '#6b7477';
     ctx.globalAlpha = 0.14;
     ctx.beginPath();
     let x = next() * size;
@@ -46,14 +46,22 @@ const asphaltCanvas = (ctx, size) => {
     }
     ctx.stroke();
   }
+  ctx.globalAlpha = 0.07;
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = i % 2 ? '#5f686a' : '#333a3d';
+    const radius = 28 + next() * 52;
+    ctx.beginPath();
+    ctx.arc(next() * size, next() * size, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.globalAlpha = 1;
 };
 
 const pavementCanvas = (ctx, size) => {
-  ctx.fillStyle = '#dddcd0';
+  ctx.fillStyle = '#a9a79f';
   ctx.fillRect(0, 0, size, size);
-  grain(ctx, size, 2204, 6200, ['#c6c9c0', '#edebdf', '#adb5ac']);
-  ctx.strokeStyle = '#b0b7ae';
+  grain(ctx, size, 2204, 6200, ['#98968e', '#b6b3aa', '#8d8b84']);
+  ctx.strokeStyle = '#8a8881';
   ctx.lineWidth = 2;
   for (let i = 0; i <= size; i += 64) {
     ctx.beginPath();
@@ -66,55 +74,55 @@ const pavementCanvas = (ctx, size) => {
 };
 
 const stuccoCanvas = (ctx, size) => {
-  ctx.fillStyle = '#f1eee5';
+  ctx.fillStyle = '#cec8bc';
   ctx.fillRect(0, 0, size, size);
-  grain(ctx, size, 3012, 7000, ['#fffdf4', '#c6c6bd', '#e1ded2']);
-  ctx.fillStyle = '#cfd0c6';
+  grain(ctx, size, 3012, 7000, ['#ded8cc', '#b4afa4', '#c5c0b4']);
+  ctx.fillStyle = '#a9a49a';
   for (let i = 0; i < size; i += 64) ctx.fillRect(0, i, size, 2);
 };
 
 const brickCanvas = (ctx, size) => {
-  ctx.fillStyle = '#d2c7b7';
+  ctx.fillStyle = '#8a6a57';
   ctx.fillRect(0, 0, size, size);
   const next = random(702);
   for (let row = 0; row < 16; row++) {
     for (let col = -1; col < 8; col++) {
       const x = col * 37 + (row % 2) * 18;
-      ctx.fillStyle = ['#e0d4c2', '#f0e1cd', '#d6c5b3', '#e8d9c6'][Math.floor(next() * 4)];
+      ctx.fillStyle = ['#96745f', '#a67e63', '#7c5d4d', '#8f6c58'][Math.floor(next() * 4)];
       ctx.fillRect(x + 1, row * 16 + 1, 35, 14);
     }
   }
-  grain(ctx, size, 303, 2200, ['#c8b8a7', '#f9ead6']);
+  grain(ctx, size, 303, 2200, ['#6f5344', '#b08a6d']);
 };
 
 const tileCanvas = (ctx, size) => {
-  ctx.fillStyle = '#dce4df';
+  ctx.fillStyle = '#b9c1c2';
   ctx.fillRect(0, 0, size, size);
-  ctx.fillStyle = '#acbebd';
+  ctx.fillStyle = '#8f9a9e';
   for (let x = 0; x < size; x += 24) ctx.fillRect(x, 0, 2, size);
   for (let y = 0; y < size; y += 56) ctx.fillRect(0, y, size, 3);
-  grain(ctx, size, 818, 2200, ['#edf2ea', '#b9c9c7']);
+  grain(ctx, size, 818, 2200, ['#c8cfcf', '#98a4a7']);
 };
 
 function glassCanvas(lit) {
   return (ctx, size) => {
-    ctx.fillStyle = lit ? '#a98867' : '#a4aaa2';
+    ctx.fillStyle = lit ? '#8a6e52' : '#6f7c80';
     ctx.fillRect(0, 0, size, size);
     const gradient = ctx.createLinearGradient(0, 0, size, size);
     if (lit) {
-      gradient.addColorStop(0, '#e8c98d');
-      gradient.addColorStop(0.48, '#786d59');
-      gradient.addColorStop(1, '#f4d396');
+      gradient.addColorStop(0, '#f0cd93');
+      gradient.addColorStop(0.48, '#5c4c3d');
+      gradient.addColorStop(1, '#ffd79b');
     } else {
-      gradient.addColorStop(0, '#90b5bd');
-      gradient.addColorStop(0.36, '#365e69');
-      gradient.addColorStop(0.65, '#53717c');
-      gradient.addColorStop(1, '#9bc5c6');
+      gradient.addColorStop(0, '#7e959c');
+      gradient.addColorStop(0.36, '#28373e');
+      gradient.addColorStop(0.65, '#3c4e56');
+      gradient.addColorStop(1, '#8aa0a6');
     }
     ctx.fillStyle = gradient;
     ctx.fillRect(8, 8, size - 16, size - 16);
-    ctx.fillStyle = lit ? '#f5dca8' : '#b8dce0';
-    ctx.globalAlpha = lit ? 0.34 : 0.27;
+    ctx.fillStyle = lit ? '#ffe3ad' : '#c3d6da';
+    ctx.globalAlpha = lit ? 0.3 : 0.22;
     ctx.beginPath();
     ctx.moveTo(size * 0.63, 8);
     ctx.lineTo(size * 0.88, 8);
@@ -122,11 +130,11 @@ function glassCanvas(lit) {
     ctx.lineTo(size * 0.25, size - 8);
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.fillStyle = lit ? '#715b4c' : '#7d9799';
+    ctx.fillStyle = lit ? '#5f4a3a' : '#58676b';
     ctx.fillRect(size / 2 - 3, 8, 6, size - 16);
     ctx.fillRect(8, size * 0.54, size - 16, 4);
-    ctx.fillStyle = '#f6f2dc';
-    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#d8d4c4';
+    ctx.globalAlpha = 0.5;
     ctx.fillRect(2, 2, size - 4, 4);
     ctx.globalAlpha = 1;
   };

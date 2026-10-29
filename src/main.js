@@ -11,6 +11,7 @@ import { createArsenal, weaponById } from './weapons.js';
 import { createPolice } from './police.js';
 import { createAudio } from './audio.js';
 import { createDayNight } from './daynight.js';
+import { createPostFX } from './postfx.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
@@ -19,7 +20,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color('#acdce4');
 scene.fog = new THREE.Fog('#b3cdd3', 155, 660);
 
-const camera = new THREE.PerspectiveCamera(65, 1, 0.12, 950);
+const camera = new THREE.PerspectiveCamera(62, 1, 0.12, 950);
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true,
@@ -30,20 +31,52 @@ try {
 }
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.32;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const postfx = createPostFX(renderer, scene, camera);
+let qualityLevel = 'high';
 
-const sky = new THREE.HemisphereLight('#d9ecf2', '#8d9985', 1.55);
+function skyEnvironment() {
+  const surface = document.createElement('canvas');
+  surface.width = 512;
+  surface.height = 256;
+  const ctx = surface.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+  gradient.addColorStop(0, '#4277ad');
+  gradient.addColorStop(0.36, '#94b8d1');
+  gradient.addColorStop(0.5, '#d6d4c8');
+  gradient.addColorStop(0.6, '#8f8b7f');
+  gradient.addColorStop(1, '#292c2d');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 512, 256);
+  const glow = ctx.createRadialGradient(140, 74, 0, 140, 74, 86);
+  glow.addColorStop(0, 'rgba(255, 243, 211, 1)');
+  glow.addColorStop(1, 'rgba(255, 243, 211, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, 512, 256);
+  const texture = new THREE.CanvasTexture(surface);
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromEquirectangular(texture).texture;
+  texture.dispose();
+  pmrem.dispose();
+  return env;
+}
+scene.environment = skyEnvironment();
+scene.environmentIntensity = 0.5;
+
+const sky = new THREE.HemisphereLight('#b9cede', '#6a6a5c', 0.95);
 scene.add(sky);
-const sun = new THREE.DirectionalLight('#f8e4c3', 2.5);
+const sun = new THREE.DirectionalLight('#fff0d6', 3.1);
 sun.position.set(-110, 112, 75);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.left = -46;
-sun.shadow.camera.right = 46;
-sun.shadow.camera.top = 46;
-sun.shadow.camera.bottom = -46;
+sun.shadow.camera.left = -70;
+sun.shadow.camera.right = 70;
+sun.shadow.camera.top = 70;
+sun.shadow.camera.bottom = -70;
 sun.shadow.camera.near = 10;
 sun.shadow.camera.far = 360;
 sun.shadow.bias = -0.001;
@@ -58,15 +91,50 @@ physics.defaultContactMaterial.restitution = 0.02;
 const world = createWorld(scene, physics);
 world.actor.scale.setScalar(0.62);
 const lampPools = [];
-const poolGeometry = new THREE.CircleGeometry(5.6, 20);
+const poolTexture = (() => {
+  const surface = document.createElement('canvas');
+  surface.width = surface.height = 128;
+  const ctx = surface.getContext('2d');
+  const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0, 'rgba(255,206,150,0.95)');
+  gradient.addColorStop(0.42, 'rgba(255,178,104,0.34)');
+  gradient.addColorStop(1, 'rgba(255,150,70,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(surface);
+})();
+const poolGeometry = new THREE.PlaneGeometry(10, 10);
 for (const lamp of world.lamps) {
-  const material = new THREE.MeshBasicMaterial({ color: '#ffcf86', transparent: true,
-    opacity: 0, depthWrite: false });
+  const material = new THREE.MeshBasicMaterial({ map: poolTexture, color: '#ffc98c',
+    transparent: true, opacity: 0, depthWrite: false,
+    blending: THREE.AdditiveBlending });
   const pool = new THREE.Mesh(poolGeometry, material);
   pool.rotation.x = -Math.PI / 2;
   pool.position.set(lamp.x, 0.09, lamp.z);
   scene.add(pool);
   lampPools.push(material);
+}
+const glowTexture = (() => {
+  const surface = document.createElement('canvas');
+  surface.width = surface.height = 128;
+  const ctx = surface.getContext('2d');
+  const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0, 'rgba(255,226,176,1)');
+  gradient.addColorStop(0.32, 'rgba(255,196,120,0.55)');
+  gradient.addColorStop(1, 'rgba(255,168,80,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(surface);
+})();
+const lampGlows = [];
+for (const lamp of world.lamps) {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture,
+    color: '#ffd49a', transparent: true, opacity: 0, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  sprite.position.set(lamp.x, lamp.y + 0.9, lamp.z);
+  sprite.scale.set(5.2, 5.2, 1);
+  scene.add(sprite);
+  lampGlows.push(sprite.material);
 }
 const shops = createShops(scene, physics);
 const obstacles = [...world.colliders, ...shops.colliders];
@@ -78,7 +146,8 @@ const police = createPolice(scene, physics, {
 });
 const dayNight = createDayNight({ scene, sun, hemisphere: sky, fog: scene.fog,
   atmosphere, lamps: world.lamps, windowMaterials: world.windowMaterials,
-  shopLamps: shops.lampMaterials, lightPools: lampPools, startHour: 8.6 });
+  shopLamps: shops.lampMaterials, lightPools: lampPools, glows: lampGlows,
+  startHour: 17.2 });
 
 const player = new CANNON.Body({ mass: 65, shape: new CANNON.Sphere(0.62),
   material: new CANNON.Material({ friction: 0.2 }), linearDamping: 0.55 });
@@ -1162,6 +1231,9 @@ function moveCamera(dt) {
   const targetY = (state.currentCar ? 1.5 : 1.25) + state.cameraPitch * 3.4;
   const desiredCamera = new THREE.Vector3(position.x + Math.sin(state.cameraYaw) *
     distance, position.y + height, position.z + Math.cos(state.cameraYaw) * distance);
+  const shoulder = driving ? 0.3 : aiming ? 0.9 : 0.6;
+  desiredCamera.x += Math.cos(state.cameraYaw) * shoulder;
+  desiredCamera.z -= Math.sin(state.cameraYaw) * shoulder;
   desiredCamera.x = THREE.MathUtils.clamp(desiredCamera.x, -CITY_LIMIT - 40,
     CITY_LIMIT + 40);
   desiredCamera.z = THREE.MathUtils.clamp(desiredCamera.z, -CITY_LIMIT - 55,
@@ -1548,9 +1620,15 @@ function resetGame() {
 
 function updateQuality() {
   const option = $('quality').value;
+  qualityLevel = option;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1,
     option === 'high' ? 1.5 : option === 'medium' ? 1.0 : 0.65));
   renderer.shadowMap.enabled = option !== 'low';
+  if (option === 'high') sun.shadow.mapSize.set(2048, 2048);
+  else sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.map?.dispose();
+  sun.shadow.map = null;
+  postfx.setQuality(option);
   resize();
   saveSettings();
 }
@@ -1561,6 +1639,14 @@ function resize() {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   renderer.setSize(width, height, false);
+  postfx.setSize(width, height, renderer.getPixelRatio());
+}
+
+function renderFrame(dt) {
+  renderer.info.autoReset = false;
+  renderer.info.reset();
+  if (qualityLevel === 'low') renderer.render(scene, camera);
+  else postfx.render(dt, state.elapsed);
 }
 
 function toggleRadio() {
@@ -1719,7 +1805,7 @@ setupControls();
 updateQuality();
 updateUI();
 moveCamera(1);
-renderer.render(scene, camera);
+renderFrame(0);
 $('loading').classList.add('hidden');
 $('interface').classList.remove('hidden');
 document.documentElement.dataset.gameReady = 'true';
@@ -1731,10 +1817,10 @@ let uiAt = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   state.frames++;
-  const dt = Math.min(0.1, (now - lastFrame) / 1000);
+  const dt = Math.max(0, Math.min(0.1, (now - lastFrame) / 1000));
   lastFrame = now;
   if (!state.paused && !state.mapOpen && !state.shopOpen) updateWorld(dt);
-  renderer.render(scene, camera);
+  renderFrame(dt);
   if (now - uiAt > 130) { updateUI(); uiAt = now; }
 }
 requestAnimationFrame(frame);
@@ -1749,10 +1835,15 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
       loaded: state.arsenal.loadedOf(state.arsenal.currentId),
       stride: Math.abs(world.actor.userData.rig.legs[0].rotation.x) +
         Math.abs(world.actor.userData.rig.legs[1].rotation.x),
+      actorYaw: world.actor.rotation.y,
+      moveDir: { ...state.moveDir },
+      velocity: { x: player.velocity.x, z: player.velocity.z },
+      aiming: state.aiming, idleFor: state.elapsed - state.mouseMovedAt,
       wheelAngle: state.currentCar?.mesh.userData.wheels[0].rotation.x ?? null,
       carYaw: state.currentCar?.yaw ?? null,
       camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z,
-        yaw: state.cameraYaw },
+        yaw: state.cameraYaw, rx: camera.rotation.x, ry: camera.rotation.y,
+        rz: camera.rotation.z },
       police: police.count(), pressed: [...keys] }),
     teleport: (x, z) => {
       if (state.currentCar) exitCar(true);
@@ -1760,6 +1851,12 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
       player.velocity.set(0, 0, 0);
     },
     setWanted: (level) => { state.wanted = level; state.wantedCooldown = 35; },
+    info: () => ({ ...renderer.info.render, elapsed: state.elapsed,
+      lights: { sun: +sun.intensity.toFixed(2),
+        hemi: +sky.intensity.toFixed(2),
+        hemiColor: sky.color.getHexString(),
+        exposure: renderer.toneMappingExposure,
+        env: +scene.environmentIntensity.toFixed(2) } }),
     probe: () => {
       const p = player.position;
       const near = [];
