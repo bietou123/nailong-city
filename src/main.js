@@ -70,6 +70,7 @@ for (const lamp of world.lamps) {
 }
 const shops = createShops(scene, physics);
 const obstacles = [...world.colliders, ...shops.colliders];
+const obstacleProbe = new CANNON.Vec3();
 const audio = createAudio();
 const police = createPolice(scene, physics, {
   makeCar,
@@ -83,6 +84,7 @@ const player = new CANNON.Body({ mass: 65, shape: new CANNON.Sphere(0.62),
   material: new CANNON.Material({ friction: 0.2 }), linearDamping: 0.55 });
 player.position.set(0, 0.7, 7);
 player.fixedRotation = true;
+player.allowSleep = false;
 player.updateMassProperties();
 physics.addBody(player);
 
@@ -106,7 +108,8 @@ const state = {
   currentCar: null, paused: false, mapOpen: false, shopOpen: false,
   cameraYaw: Math.PI + 0.38, cameraPitch: 0.03, cameraDistance: 7.4,
   elapsed: 0, mouseMovedAt: 0, cameraKeyAt: 0, nextSave: 0, shotCooldown: 0,
-  crashCooldown: 0,
+  crashCooldown: 0, stuckTimer: 0, stuckAnchor: { x: 0, z: 7 },
+  moveDir: { x: 0, z: 0 },
   hurtCooldown: 0, toastUntil: 0, cameraShake: 0, frames: 0,
   arsenal: createArsenal(), aiming: false, outfit: 'sunny',
   stats: { kills: 0, missions: 0, crimes: 0, distance: 0 },
@@ -158,7 +161,9 @@ if (saved) {
     THREE.MathUtils.clamp(saved.armor, 0, 100) : 0;
   if (Number.isFinite(saved.x) && Number.isFinite(saved.z) &&
       Math.abs(saved.x) < CITY_LIMIT && Math.abs(saved.z) < CITY_LIMIT) {
-    player.position.set(saved.x, 0.7, saved.z);
+    const spot = freeSpot(saved.x, saved.z);
+    player.position.set(spot.x, 0.7, spot.z);
+    state.safePosition = { x: spot.x, z: spot.z };
   }
   if (saved.outfit && OUTFITS[saved.outfit]) state.outfit = saved.outfit;
   if (saved.stats && typeof saved.stats === 'object') {
@@ -267,7 +272,6 @@ function nearestShop() {
   return best;
 }
 
-const obstacleProbe = new CANNON.Vec3();
 function insideObstacle(x, z, margin = 0.1, y = 0.7) {
   for (const body of obstacles) {
     const shape = body.shapes[0];
@@ -281,6 +285,32 @@ function insideObstacle(x, z, margin = 0.1, y = 0.7) {
     }
   }
   return false;
+}
+
+function freeSpot(x, z, margin = 0.85) {
+  if (!insideObstacle(x, z, margin, 0.7)) return { x, z };
+  for (let ring = 1; ring <= 12; ring++) {
+    const radius = ring * 1.6;
+    for (let step = 0; step < 16; step++) {
+      const angle = (step / 16) * Math.PI * 2 + ring * 0.23;
+      const nx = THREE.MathUtils.clamp(x + Math.cos(angle) * radius,
+        -CITY_LIMIT, CITY_LIMIT);
+      const nz = THREE.MathUtils.clamp(z + Math.sin(angle) * radius,
+        -CITY_LIMIT, CITY_LIMIT);
+      if (!insideObstacle(nx, nz, margin, 0.7)) return { x: nx, z: nz };
+    }
+  }
+  return { x: 0, z: 7 };
+}
+
+function escapeStuck(nx, nz) {
+  const ahead = { x: player.position.x + nx * 1.1,
+    z: player.position.z + nz * 1.1 };
+  const target = insideObstacle(ahead.x, ahead.z, 0.55, 0.7) ?
+    freeSpot(player.position.x, player.position.z, 0.7) : ahead;
+  player.position.set(target.x, Math.max(player.position.y, 0.78), target.z);
+  player.velocity.set(0, 0, 0);
+  state.safePosition = { x: target.x, z: target.z };
 }
 
 function hurt(amount, source = 'hit') {
@@ -999,6 +1029,7 @@ function movePlayer(dt) {
     const grip = handbrake ? 0.62 : 1;
     car.body.velocity.x = Math.sin(car.yaw) * car.speed * grip;
     car.body.velocity.z = Math.cos(car.yaw) * car.speed * grip;
+    car.body.wakeUp();
     if (Math.abs(car.body.position.x) > CITY_LIMIT + 9 ||
         Math.abs(car.body.position.z) > CITY_LIMIT + 9) {
       car.body.position.x = THREE.MathUtils.clamp(car.body.position.x,
@@ -1017,6 +1048,8 @@ function movePlayer(dt) {
   const dz = -Math.sin(state.cameraYaw) * walk.x - Math.cos(state.cameraYaw) * walk.y;
   player.velocity.x = dx * pace;
   player.velocity.z = dz * pace;
+  state.moveDir.x = dx;
+  state.moveDir.z = dz;
   if (walk.lengthSq() > 0.01) {
     const facing = Math.atan2(dx, dz);
     const diff = Math.atan2(Math.sin(facing - world.actor.rotation.y),
@@ -1196,15 +1229,31 @@ function updateWorld(dt) {
   vehicleHitsPedestrians();
   physics.step(1 / 60, dt, 6);
   if (!state.currentCar) {
-    if (insideObstacle(player.position.x, player.position.z, 0.04,
+    if (insideObstacle(player.position.x, player.position.z, 0.15,
         player.position.y)) {
-      player.position.x = state.safePosition.x;
-      player.position.z = state.safePosition.z;
-      player.velocity.x = 0;
-      player.velocity.z = 0;
+      const spot = freeSpot(player.position.x, player.position.z);
+      player.position.set(spot.x, 0.7, spot.z);
+      player.velocity.set(0, 0, 0);
+      state.safePosition = { x: spot.x, z: spot.z };
     } else {
       state.safePosition.x = player.position.x;
       state.safePosition.z = player.position.z;
+    }
+    const dirLength = Math.hypot(state.moveDir.x, state.moveDir.z);
+    if (dirLength > 0.1) {
+      state.stuckTimer += dt;
+      const progress = Math.hypot(player.position.x - state.stuckAnchor.x,
+        player.position.z - state.stuckAnchor.z);
+      if (state.stuckTimer >= 0.8) {
+        if (progress < 0.22) escapeStuck(state.moveDir.x / dirLength,
+          state.moveDir.z / dirLength);
+        state.stuckTimer = 0;
+        state.stuckAnchor = { x: player.position.x, z: player.position.z };
+      }
+    } else {
+      state.stuckTimer = 0;
+      state.stuckAnchor.x = player.position.x;
+      state.stuckAnchor.z = player.position.z;
     }
   }
   syncModels(dt);
@@ -1576,7 +1625,7 @@ function setupControls() {
       switchWeapon(Number(event.code.slice(5)));
     }
     if (event.code === 'Space' && !event.repeat && !state.currentCar &&
-        player.position.y < 0.72) player.velocity.y = 9;
+        player.position.y < 0.72) { player.velocity.y = 9; player.wakeUp(); }
     keys.add(event.code);
   });
   window.addEventListener('keyup', (event) => keys.delete(event.code));
@@ -1634,7 +1683,7 @@ function setupControls() {
     if (state.currentCar) {
       keys.add('Space');
       setTimeout(() => keys.delete('Space'), 350);
-    } else if (player.position.y < 0.72) player.velocity.y = 9;
+    } else if (player.position.y < 0.72) { player.velocity.y = 9; player.wakeUp(); }
   });
   const stick = $('joystick');
   const knob = $('joystick-knob');
@@ -1711,7 +1760,26 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
       player.velocity.set(0, 0, 0);
     },
     setWanted: (level) => { state.wanted = level; state.wantedCooldown = 35; },
-    setHour: (hours) => { dayNight.hours = hours; },
+    probe: () => {
+      const p = player.position;
+      const near = [];
+      for (const body of obstacles) {
+        const shape = body.shapes[0];
+        if (!(shape instanceof CANNON.Box)) continue;
+        const local = body.quaternion.inverse().vmult(
+          new CANNON.Vec3(p.x - body.position.x, 0, p.z - body.position.z));
+        if (Math.abs(local.x) > shape.halfExtents.x + 3 ||
+            Math.abs(local.z) > shape.halfExtents.z + 3) continue;
+        near.push({ x: +body.position.x.toFixed(1), y: +body.position.y.toFixed(1),
+          z: +body.position.z.toFixed(1), hx: +shape.halfExtents.x.toFixed(1),
+          hy: +shape.halfExtents.y.toFixed(1), hz: +shape.halfExtents.z.toFixed(1),
+          lx: +local.x.toFixed(2), lz: +local.z.toFixed(2) });
+      }
+      return { pos: [p.x, p.y, p.z].map((v) => +v.toFixed(2)),
+        vel: [player.velocity.x, player.velocity.y, player.velocity.z]
+          .map((v) => +v.toFixed(2)),
+        inside: insideObstacle(p.x, p.z, 0.15, p.y), near };
+    },    setHour: (hours) => { dayNight.hours = hours; },
     setCash: (value) => { state.progress.cash = value; },
     giveWeapon: (id) => { state.arsenal.unlock(id); },
     shopNearby: () => Boolean(nearestShop()),

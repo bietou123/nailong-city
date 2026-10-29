@@ -85,4 +85,45 @@ report('AUDIO', await page.evaluate(() => ({
   volume: window.__audio.context ? 'created' : 'missing',
 })));
 
+await page.addInitScript(() => {
+  localStorage.setItem('nailong-city-save', JSON.stringify({
+    x: 82, z: -22, progress: {}, health: 100, armor: 0,
+  }));
+});
+await page.reload();
+await page.waitForSelector('html[data-game-ready="true"]', { timeout: 40000 });
+await page.waitForTimeout(1200);
+const rescued = await snapshot();
+await page.keyboard.down('ArrowUp');
+await page.waitForTimeout(600);
+const held = await snapshot();
+await page.waitForTimeout(900);
+await page.keyboard.up('ArrowUp');
+const escaped = await snapshot();
+report('STUCK SAVE', {
+  from: [rescued.x.toFixed(1), rescued.z.toFixed(1)],
+  pressed: held.pressed,
+  moved: Math.hypot(escaped.x - rescued.x, escaped.z - rescued.z).toFixed(2),
+  insideShop: Math.hypot(rescued.x - 82, rescued.z + 22) < 3,
+  paused: await page.evaluate(() => !document.querySelector('#pause-screen').classList.contains('hidden')),
+  probe: await page.evaluate(() => window.__NAILONG_DEBUG__.probe()),
+});
+
+await page.evaluate(() => window.__NAILONG_DEBUG__.teleport(0, 7));
+await page.waitForTimeout(6000);
+const rested = await snapshot();
+await hold('ArrowUp', 1500);
+const afterRest = await snapshot();
+report('IDLE 6S THEN WALK', {
+  moved: Math.hypot(afterRest.x - rested.x, afterRest.z - rested.z).toFixed(2),
+  y: afterRest.camera.y.toFixed(2),
+});
+
+await page.evaluate(() => window.__NAILONG_DEBUG__.teleport(5, 15));
+await page.keyboard.press('KeyE');
+await page.waitForTimeout(2500);
+await hold('w', 1500);
+const idleDrive = await snapshot();
+report('IDLE 2.5S THEN DRIVE', { inCar: idleDrive.car, wheel: idleDrive.wheelAngle });
+
 await app.close();

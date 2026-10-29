@@ -12,6 +12,9 @@ function createWindow() {
   const window = new BrowserWindow({
     width: 1480,
     height: 900,
+    x: debugMode ? -4000 : undefined,
+    y: debugMode ? -4000 : undefined,
+    skipTaskbar: debugMode,
     minWidth: 960,
     minHeight: 640,
     backgroundColor: '#a9dce1',
@@ -19,7 +22,8 @@ function createWindow() {
     autoHideMenuBar: true,
     title: '奶龙之城：犯罪都市',
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true,
+      backgroundThrottling: !(smokeTest || debugMode) },
   });
   Menu.setApplicationMenu(null);
   if (smokeTest) {
