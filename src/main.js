@@ -56,6 +56,7 @@ physics.allowSleep = true;
 physics.defaultContactMaterial.friction = 0;
 physics.defaultContactMaterial.restitution = 0.02;
 const world = createWorld(scene, physics);
+world.actor.scale.setScalar(0.62);
 const lampPools = [];
 const poolGeometry = new THREE.CircleGeometry(5.6, 20);
 for (const lamp of world.lamps) {
@@ -68,6 +69,7 @@ for (const lamp of world.lamps) {
   lampPools.push(material);
 }
 const shops = createShops(scene, physics);
+const obstacles = [...world.colliders, ...shops.colliders];
 const audio = createAudio();
 const police = createPolice(scene, physics, {
   makeCar,
@@ -77,9 +79,9 @@ const dayNight = createDayNight({ scene, sun, hemisphere: sky, fog: scene.fog,
   atmosphere, lamps: world.lamps, windowMaterials: world.windowMaterials,
   shopLamps: shops.lampMaterials, lightPools: lampPools, startHour: 8.6 });
 
-const player = new CANNON.Body({ mass: 65, shape: new CANNON.Sphere(0.94),
+const player = new CANNON.Body({ mass: 65, shape: new CANNON.Sphere(0.62),
   material: new CANNON.Material({ friction: 0.2 }), linearDamping: 0.55 });
-player.position.set(0, 1.03, 7);
+player.position.set(0, 0.7, 7);
 player.fixedRotation = true;
 player.updateMassProperties();
 physics.addBody(player);
@@ -102,8 +104,9 @@ const SHOP_META = {
 const state = {
   progress: newProgress(), health: 100, armor: 0, wanted: 0, wantedCooldown: 0,
   currentCar: null, paused: false, mapOpen: false, shopOpen: false,
-  cameraYaw: Math.PI + 0.38, cameraPitch: 0.03, cameraDistance: 9.2,
-  elapsed: 0, mouseMovedAt: 0, nextSave: 0, shotCooldown: 0, crashCooldown: 0,
+  cameraYaw: Math.PI + 0.38, cameraPitch: 0.03, cameraDistance: 7.4,
+  elapsed: 0, mouseMovedAt: 0, cameraKeyAt: 0, nextSave: 0, shotCooldown: 0,
+  crashCooldown: 0,
   hurtCooldown: 0, toastUntil: 0, cameraShake: 0, frames: 0,
   arsenal: createArsenal(), aiming: false, outfit: 'sunny',
   stats: { kills: 0, missions: 0, crimes: 0, distance: 0 },
@@ -111,6 +114,7 @@ const state = {
   shop: null, bannerUntil: 0, statusFlashUntil: 0, damageFlashUntil: 0,
   lastJob: 0, missionBannerShown: false, radioHint: false,
   footstepTimer: 0, distanceAccumulator: 0, lastPosition: null,
+  safePosition: { x: 0, z: 7 },
 };
 const cameraPosition = new THREE.Vector3(-4, 6, -9);
 const cameraLook = new THREE.Vector3(0, 2, 5);
@@ -154,7 +158,7 @@ if (saved) {
     THREE.MathUtils.clamp(saved.armor, 0, 100) : 0;
   if (Number.isFinite(saved.x) && Number.isFinite(saved.z) &&
       Math.abs(saved.x) < CITY_LIMIT && Math.abs(saved.z) < CITY_LIMIT) {
-    player.position.set(saved.x, 1.1, saved.z);
+    player.position.set(saved.x, 0.7, saved.z);
   }
   if (saved.outfit && OUTFITS[saved.outfit]) state.outfit = saved.outfit;
   if (saved.stats && typeof saved.stats === 'object') {
@@ -263,6 +267,22 @@ function nearestShop() {
   return best;
 }
 
+const obstacleProbe = new CANNON.Vec3();
+function insideObstacle(x, z, margin = 0.1, y = 0.7) {
+  for (const body of obstacles) {
+    const shape = body.shapes[0];
+    if (!(shape instanceof CANNON.Box)) continue;
+    const half = shape.halfExtents;
+    if (y < body.position.y - half.y || y > body.position.y + half.y) continue;
+    obstacleProbe.set(x - body.position.x, 0, z - body.position.z);
+    const local = body.quaternion.inverse().vmult(obstacleProbe);
+    if (Math.abs(local.x) < half.x + margin && Math.abs(local.z) < half.z + margin) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hurt(amount, source = 'hit') {
   if (state.hurtCooldown > 0 && source !== 'police') return;
   if (amount <= 0) return;
@@ -302,7 +322,7 @@ function downed() {
   state.wanted = 0;
   state.wantedCooldown = 0;
   police.clear();
-  player.position.set(0, 1.2, 7);
+  player.position.set(0, 0.7, 7);
   player.velocity.set(0, 0, 0);
   showStatusFlash(busted ? 'BUSTED' : 'WASTED');
   toast(busted ? `被捕 · 保释金 $${fee}` : `送医 · 医疗费 $${fee}`, 4);
@@ -429,8 +449,18 @@ function exitCar(force = false) {
   const sideX = Math.abs(car.body.position.x - roadX) < 9;
   const offsetX = sideX ? (roadX - car.body.position.x >= 0 ? 3.8 : -3.8) : 0;
   const offsetZ = sideX ? 0 : (roadZ - car.body.position.z >= 0 ? 3.8 : -3.8);
-  player.position.set(car.body.position.x + offsetX, 1.18,
-    car.body.position.z + offsetZ);
+  let spot = { x: car.body.position.x + offsetX, z: car.body.position.z + offsetZ };
+  if (insideObstacle(spot.x, spot.z, 0.7)) {
+    let found = false;
+    for (let index = 0; index < 8 && !found; index++) {
+      const angle = index * Math.PI / 4;
+      const x = car.body.position.x + Math.sin(angle) * 3.6;
+      const z = car.body.position.z + Math.cos(angle) * 3.6;
+      if (Math.abs(x) < CITY_LIMIT && Math.abs(z) < CITY_LIMIT &&
+          !insideObstacle(x, z, 0.7)) { spot = { x, z }; found = true; }
+    }
+  }
+  player.position.set(spot.x, 0.7, spot.z);
   player.velocity.set(0, 0, 0);
   player.type = CANNON.Body.DYNAMIC;
   player.mass = 65;
@@ -960,7 +990,7 @@ function movePlayer(dt) {
     car.speed *= Math.exp(-(handbrake ? 4.6 : 0.55) * dt);
     car.speed = THREE.MathUtils.clamp(car.speed, -9.5, topSpeed);
     const turnRate = 1.55 * (handbrake ? 1.45 : 1);
-    car.yaw += turn * Math.min(Math.abs(car.speed) / 7, 1) *
+    car.yaw -= turn * Math.min(Math.abs(car.speed) / 7, 1) *
       Math.sign(car.speed) * dt * turnRate;
     car.body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), car.yaw);
     const grip = handbrake ? 0.62 : 1;
@@ -1028,7 +1058,7 @@ function moveEffects(dt) {
 
 function syncModels(dt) {
   if (!state.currentCar) {
-    world.actor.position.set(player.position.x, player.position.y - 0.94,
+    world.actor.position.set(player.position.x, player.position.y - 0.62,
       player.position.z);
     const { head, arms, legs, tail } = world.actor.userData.rig;
     const speed = Math.hypot(player.velocity.x, player.velocity.z);
@@ -1077,23 +1107,30 @@ function syncModels(dt) {
 
 function moveCamera(dt) {
   const position = getPosition();
-  if (state.currentCar && state.elapsed - state.mouseMovedAt > 1.5) {
-    const desired = state.currentCar.yaw + Math.PI;
+  const driving = Boolean(state.currentCar);
+  const moving = driving ? Math.abs(state.currentCar.speed) > 1.2
+    : Math.hypot(player.velocity.x, player.velocity.z) > 0.6;
+  const idleLook = state.elapsed - state.mouseMovedAt > 1.1 &&
+    state.elapsed - state.cameraKeyAt > 1.1;
+  if (moving && !state.aiming && idleLook) {
+    const heading = driving ? state.currentCar.yaw : world.actor.rotation.y;
+    const desired = heading + Math.PI;
     const diff = Math.atan2(Math.sin(desired - state.cameraYaw),
       Math.cos(desired - state.cameraYaw));
-    state.cameraYaw += diff * Math.min(1, dt * 2.5);
+    const pull = driving ? dt * 2.5 : dt * 1.5;
+    state.cameraYaw += diff * Math.min(1, pull);
   }
   const aiming = state.aiming && !state.currentCar;
-  const distance = state.cameraDistance * (state.currentCar ? 1.4 : aiming ? 0.52 : 1);
-  const height = (state.currentCar ? 5.1 : 3.85) + state.cameraPitch * 2.4;
-  const targetY = (state.currentCar ? 1.5 : 1.95) + state.cameraPitch * 3.4;
+  const distance = state.cameraDistance * (state.currentCar ? 1.18 : aiming ? 0.55 : 1);
+  const height = (state.currentCar ? 4.5 : 3.05) + state.cameraPitch * 2.4;
+  const targetY = (state.currentCar ? 1.5 : 1.25) + state.cameraPitch * 3.4;
   const desiredCamera = new THREE.Vector3(position.x + Math.sin(state.cameraYaw) *
     distance, position.y + height, position.z + Math.cos(state.cameraYaw) * distance);
   desiredCamera.x = THREE.MathUtils.clamp(desiredCamera.x, -CITY_LIMIT - 40,
     CITY_LIMIT + 40);
   desiredCamera.z = THREE.MathUtils.clamp(desiredCamera.z, -CITY_LIMIT - 55,
     CITY_LIMIT + 40);
-  const viewTarget = new THREE.Vector3(position.x, targetY + (position.y - 0.9),
+  const viewTarget = new THREE.Vector3(position.x, targetY + (position.y - 0.62),
     position.z);
   const ray = new CANNON.RaycastResult();
   physics.raycastClosest(new CANNON.Vec3(viewTarget.x, viewTarget.y, viewTarget.z),
@@ -1155,6 +1192,18 @@ function updateWorld(dt) {
   movePlayer(dt);
   vehicleHitsPedestrians();
   physics.step(1 / 60, dt, 6);
+  if (!state.currentCar) {
+    if (insideObstacle(player.position.x, player.position.z, 0.04,
+        player.position.y)) {
+      player.position.x = state.safePosition.x;
+      player.position.z = state.safePosition.z;
+      player.velocity.x = 0;
+      player.velocity.z = 0;
+    } else {
+      state.safePosition.x = player.position.x;
+      state.safePosition.z = player.position.z;
+    }
+  }
   syncModels(dt);
   moveEffects(dt);
   updateMissionTargets(dt);
@@ -1216,6 +1265,12 @@ function updateWorld(dt) {
     routeRing.scale.setScalar(1 + Math.sin(state.elapsed * 3.6) * 0.08);
   }
   dayNight.update(dt, { x: position.x, y: 0, z: position.z }, camera.position);
+  const turnKey = Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'));
+  if (turnKey) state.cameraYaw -= turnKey * dt * 1.8;
+  const pitchKey = Number(keys.has('ArrowDown')) - Number(keys.has('ArrowUp'));
+  if (pitchKey) state.cameraPitch = THREE.MathUtils.clamp(
+    state.cameraPitch - pitchKey * dt * 0.6, -0.35, 0.55);
+  if (turnKey || pitchKey) state.cameraKeyAt = state.elapsed;
   moveCamera(dt);
   if (state.elapsed >= state.nextSave) {
     state.nextSave = state.elapsed + 4;
@@ -1518,21 +1573,25 @@ function setupControls() {
       switchWeapon(Number(event.code.slice(5)));
     }
     if (event.code === 'Space' && !event.repeat && !state.currentCar &&
-        player.position.y < 1.13) player.velocity.y = 9;
+        player.position.y < 0.72) player.velocity.y = 9;
     keys.add(event.code);
   });
   window.addEventListener('keyup', (event) => keys.delete(event.code));
   canvas.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'touch' || state.paused || state.mapOpen ||
         state.shopOpen) return;
+    if (!document.pointerLockElement) {
+      event.preventDefault();
+      canvas.requestPointerLock?.();
+      if (event.button === 2) state.aiming = true;
+      return;
+    }
     if (event.button === 2) {
       state.aiming = true;
       event.preventDefault();
-      if (!document.pointerLockElement) canvas.requestPointerLock?.();
       return;
     }
     if (event.button === 0) shoot();
-    if (!document.pointerLockElement) canvas.requestPointerLock?.();
   });
   canvas.addEventListener('pointerup', (event) => {
     if (event.button === 2) state.aiming = false;
@@ -1570,7 +1629,7 @@ function setupControls() {
     if (state.currentCar) {
       keys.add('Space');
       setTimeout(() => keys.delete('Space'), 350);
-    } else if (player.position.y < 1.13) player.velocity.y = 9;
+    } else if (player.position.y < 0.72) player.velocity.y = 9;
   });
   const stick = $('joystick');
   const knob = $('joystick-knob');
@@ -1611,6 +1670,7 @@ $('loading').classList.add('hidden');
 $('interface').classList.remove('hidden');
 document.documentElement.dataset.gameReady = 'true';
 if (!saved) setTimeout(() => showBanner('欢迎来到', '奶龙之城：犯罪都市', 'N'), 600);
+setTimeout(() => toast('点击画面锁定鼠标，移动鼠标转动镜头', 5), 1400);
 
 let lastFrame = performance.now();
 let uiAt = 0;
@@ -1636,10 +1696,13 @@ if (import.meta.env.DEV) {
       stride: Math.abs(world.actor.userData.rig.legs[0].rotation.x) +
         Math.abs(world.actor.userData.rig.legs[1].rotation.x),
       wheelAngle: state.currentCar?.mesh.userData.wheels[0].rotation.x ?? null,
+      carYaw: state.currentCar?.yaw ?? null,
+      camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z,
+        yaw: state.cameraYaw },
       police: police.count(), pressed: [...keys] }),
     teleport: (x, z) => {
       if (state.currentCar) exitCar(true);
-      player.position.set(x, 1.2, z);
+      player.position.set(x, 0.7, z);
       player.velocity.set(0, 0, 0);
     },
     setWanted: (level) => { state.wanted = level; state.wantedCooldown = 35; },
@@ -1650,7 +1713,7 @@ if (import.meta.env.DEV) {
     shoot,
     openShopById: (id) => {
       const shop = shops.shops.find((entry) => entry.id === id);
-      if (shop) { player.position.set(shop.x, 1.2, shop.z + 2); openShop(shop); }
+      if (shop) { player.position.set(shop.x, 0.7, shop.z + 2); openShop(shop); }
     },
   };
 }

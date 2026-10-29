@@ -77,9 +77,10 @@ function staticCollider(physics, x, z, width, depth, height) {
     new CANNON.Vec3(width / 2, height / 2, depth / 2)) });
   body.position.set(x, height / 2, z);
   physics.addBody(body);
+  return body;
 }
 
-function building(scene, physics, rng, x, z, width, depth, height, district, windows, surfaces) {
+function building(scene, physics, rng, x, z, width, depth, height, district, windows, surfaces, colliders) {
   const palettes = [
     ['#e4ba96', '#d39e7e'], ['#e6dbbc', '#c7b897'], ['#adc7bc', '#85a9a1'],
     ['#d5abb0', '#b98490'], ['#95bbc4', '#6c9ca9'], ['#bbb7b0', '#96938f'],
@@ -187,7 +188,7 @@ function building(scene, physics, rng, x, z, width, depth, height, district, win
       sign.rotation.y = side * Math.PI / 2;
     }
   }
-  staticCollider(physics, x, z, width, depth, height);
+  colliders?.push(staticCollider(physics, x, z, width, depth, height));
 }
 
 function tree(scene, x, z, palm = false) {
@@ -496,6 +497,7 @@ export function createWorld(scene, physics) {
   const windows = [];
   const lamps = [];
   const windowMaterials = [];
+  const colliders = [];
   const surfaces = createSurfaces();
   const roadVertical = new THREE.MeshStandardMaterial({ map: surfaces.roadVertical,
     color: '#f6f7f5', roughness: 1 });
@@ -540,7 +542,7 @@ export function createWorld(scene, physics) {
           const height = i === 0 && j === 0 ? 15 + rng() * 9 :
             12 + rng() * (Math.abs(i) < 2 && Math.abs(j) < 2 ? 43 : 23);
           building(scene, physics, rng, bx, bz, width, depth,
-            height, district, windows, surfaces);
+            height, district, windows, surfaces, colliders);
         }
       }
       if ((i + j) % 3 === 0) streetLamp(scene, x - 27, z - 27, lamps);
@@ -659,5 +661,6 @@ export function createWorld(scene, physics) {
       speed: 0.65 + rng() * 0.45, stunned: 0 });
   }
   const actor = dragon(scene);
-  return { actor, cars, traffic, people, garage: GARAGE, lamps, windowMaterials };
+  return { actor, cars, traffic, people, garage: GARAGE, lamps, windowMaterials,
+    colliders };
 }

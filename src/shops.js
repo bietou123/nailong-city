@@ -92,7 +92,7 @@ export const SHOP_ITEMS = {
   ],
 };
 
-function buildStall(scene, physics, shop, lampMaterials) {
+function buildStall(scene, physics, shop, lampMaterials, colliders) {
   const group = new THREE.Group();
   group.position.set(shop.x, 0, shop.z);
   group.rotation.y = shop.facing;
@@ -142,14 +142,16 @@ function buildStall(scene, physics, shop, lampMaterials) {
     shop.z + Math.cos(shop.facing) * 0.4);
   collider.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), shop.facing);
   physics.addBody(collider);
+  colliders.push(collider);
   return group;
 }
 
 export function createShops(scene, physics) {
   const lampMaterials = [];
+  const colliders = [];
   const stalls = new Map();
   for (const shop of SHOPS) {
-    stalls.set(shop.id, buildStall(scene, physics, shop, lampMaterials));
+    stalls.set(shop.id, buildStall(scene, physics, shop, lampMaterials, colliders));
   }
-  return { shops: SHOPS, items: SHOP_ITEMS, stalls, lampMaterials };
+  return { shops: SHOPS, items: SHOP_ITEMS, stalls, lampMaterials, colliders };
 }

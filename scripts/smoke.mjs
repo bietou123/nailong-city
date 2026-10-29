@@ -84,6 +84,20 @@ try {
       const after = await snapshot();
       assert.ok(Math.hypot(after.x - before.x, after.z - before.z) > 0.5,
         `walking failed: ${JSON.stringify({ before, after })}`);
+      const cameraDistance = Math.hypot(after.camera.x - after.x,
+        after.camera.z - after.z);
+      assert.ok(cameraDistance > 4 && cameraDistance < 11,
+        `camera not following the player: ${cameraDistance}`);
+
+      const yawStart = (await snapshot()).camera.yaw;
+      await page.keyboard.down('w');
+      await page.keyboard.down('a');
+      await page.waitForTimeout(2400);
+      await page.keyboard.up('a');
+      await page.keyboard.up('w');
+      const yawEnd = (await snapshot()).camera.yaw;
+      assert.ok(Math.abs(yawEnd - yawStart) > 0.15,
+        `camera does not swing with the walker: ${yawStart} -> ${yawEnd}`);
 
       await page.evaluate(() => window.__NAILONG_DEBUG__.teleport(5, 15));
       await page.keyboard.press('KeyE');
@@ -92,7 +106,14 @@ try {
       await page.waitForFunction(() => Math.abs(
         window.__NAILONG_DEBUG__.snapshot().wheelAngle) > 0.02,
       null, { timeout: 12000 });
+      const yawBefore = (await snapshot()).carYaw;
+      await page.keyboard.down('d');
+      await page.waitForTimeout(600);
+      await page.keyboard.up('d');
       await page.keyboard.up('w');
+      const yawAfter = (await snapshot()).carYaw;
+      assert.ok(yawAfter < yawBefore - 0.01,
+        `steering direction wrong: ${yawBefore} -> ${yawAfter}`);
       await page.screenshot({ path: path.join(root, 'screenshots', 'driving.png') });
       await page.keyboard.press('KeyE');
       assert.equal((await snapshot()).car, false, 'exiting car failed');
