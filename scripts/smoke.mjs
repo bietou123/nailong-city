@@ -7,6 +7,7 @@ import { chromium } from 'playwright-core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const url = 'http://127.0.0.1:5191';
+const quality = process.argv.includes('--high') ? 'high' : 'low';
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js',
   '--host', '127.0.0.1', '--port', '5191', '--strictPort'], {
   cwd: root, stdio: 'pipe', windowsHide: true,
@@ -50,8 +51,8 @@ try {
     page.on('console', (message) => {
       if (message.type() === 'error') { errors.push(message.text()); console.error('CONSOLE ERROR:', message.text()); }
     });
-    await page.addInitScript(() => localStorage.setItem('nailong-city-settings',
-      JSON.stringify({ quality: 'low', volume: 0 })));
+    await page.addInitScript((selected) => localStorage.setItem('nailong-city-settings',
+      JSON.stringify({ quality: selected, volume: 0 })), quality);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('html[data-game-ready="true"]', { timeout: 30000 });
     await page.waitForTimeout(800);
@@ -72,6 +73,8 @@ try {
     if (name === 'desktop') {
       const before = await page.evaluate(() => window.__NAILONG_DEBUG__.snapshot());
       await page.keyboard.down('w');
+      await page.waitForFunction(() => window.__NAILONG_DEBUG__.snapshot().stride > 0.02,
+        null, { timeout: 12000 });
       await page.waitForTimeout(700);
       const during = await page.evaluate(() => window.__NAILONG_DEBUG__.snapshot());
       await page.waitForTimeout(800);
@@ -83,9 +86,11 @@ try {
       await page.keyboard.press('KeyE');
       assert.equal((await page.evaluate(() => window.__NAILONG_DEBUG__.snapshot())).car,
         true, 'entering car failed');
-      await page.keyboard.down('KeyW');
-      await page.waitForTimeout(350);
-      await page.keyboard.up('KeyW');
+      await page.keyboard.down('w');
+      await page.waitForFunction(() => Math.abs(
+        window.__NAILONG_DEBUG__.snapshot().wheelAngle) > 0.02,
+      null, { timeout: 12000 });
+      await page.keyboard.up('w');
       await page.keyboard.press('KeyE');
       assert.equal((await page.evaluate(() => window.__NAILONG_DEBUG__.snapshot())).car,
         false, 'exiting car failed');

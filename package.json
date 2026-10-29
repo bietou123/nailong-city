@@ -1,6 +1,6 @@
 {
   "name": "nailong-city",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "private": true,
   "description": "Original third-person city sandbox with a cheerful yellow dragon.",
@@ -28,6 +28,7 @@
   "build": {
     "appId": "dev.nailong.city",
     "productName": "Nailong City",
+    "electronDist": "node_modules/electron/dist",
     "artifactName": "Nailong-City-${version}-${arch}.${ext}",
     "directories": { "output": "release" },
     "files": ["dist/**/*", "electron/**/*", "assets/**/*", "LICENSE", "README.md", "package.json"],

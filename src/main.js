@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { ArrowUp, CarFront, createIcons, Crosshair, Map, Pause, Play,
   RotateCcw, X } from 'lucide';
+import { createAtmosphere } from './atmosphere.js';
 import { CITY_LIMIT, GARAGE, ROAD_STEP, createWorld } from './world.js';
 import { STAGES, advanceMission, currentStage, newProgress, recoverProgress,
   targetDistance } from './mission.js';
@@ -11,7 +12,7 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('scene');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#acdce4');
-scene.fog = new THREE.Fog('#b9dddc', 100, 550);
+scene.fog = new THREE.Fog('#b3cdd3', 155, 660);
 
 const camera = new THREE.PerspectiveCamera(65, 1, 0.12, 950);
 let renderer;
@@ -23,14 +24,14 @@ try {
 }
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.28;
+renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-const sky = new THREE.HemisphereLight('#ffffff', '#9daea3', 2.15);
+const sky = new THREE.HemisphereLight('#d9ecf2', '#8d9985', 1.55);
 scene.add(sky);
-const sun = new THREE.DirectionalLight('#fff0cc', 2.6);
-sun.position.set(95, 145, 35);
+const sun = new THREE.DirectionalLight('#f8e4c3', 2.5);
+sun.position.set(-110, 112, 75);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.camera.left = -44;
@@ -41,6 +42,7 @@ sun.shadow.camera.near = 10;
 sun.shadow.camera.far = 350;
 sun.shadow.bias = -0.001;
 scene.add(sun);
+const atmosphere = createAtmosphere(scene);
 
 const physics = new CANNON.World({ gravity: new CANNON.Vec3(0, -24, 0) });
 physics.broadphase = new CANNON.SAPBroadphase(physics);
@@ -60,8 +62,9 @@ const joystick = { x: 0, y: 0 };
 const state = {
   progress: newProgress(), health: 100, wanted: 0, wantedCooldown: 0,
   currentCar: null, paused: false, mapOpen: false, cameraYaw: Math.PI + 0.38,
-  cameraDistance: 10.8, elapsed: 0, mouseMovedAt: 0, nextSave: 0,
-  shotCooldown: 0, crashCooldown: 0, hurtCooldown: 0, toastUntil: 0, frames: 0,
+  cameraDistance: 9.2, elapsed: 0, mouseMovedAt: 0, nextSave: 0,
+  shotCooldown: 0, crashCooldown: 0, hurtCooldown: 0, toastUntil: 0,
+  cameraShake: 0, frames: 0,
 };
 const cameraPosition = new THREE.Vector3(-4, 6, -9);
 const cameraLook = new THREE.Vector3(0, 2, 5);
@@ -84,6 +87,10 @@ scene.add(route);
 
 const projectiles = [];
 const officers = [];
+const effects = [];
+const effectGeometry = new THREE.SphereGeometry(0.1, 7, 5);
+const effectMaterials = ['#f9d65e', '#ee8c80', '#80d4ba', '#aad4ed'].map(
+  (color) => new THREE.MeshBasicMaterial({ color }));
 const audio = { context: null, engine: null, engineGain: null, volume: 0.35 };
 const particleColors = ['#f9d65e', '#ee8c80', '#80d4ba', '#aad4ed'];
 const saved = readSave();
@@ -299,6 +306,19 @@ function shoot() {
   beep(580, 0.065, 'triangle');
 }
 
+function burst(position, amount = 9) {
+  if (effects.length > 90) return;
+  for (let i = 0; i < amount; i++) {
+    const particle = new THREE.Mesh(effectGeometry, effectMaterials[i % effectMaterials.length]);
+    particle.position.set(position.x + (Math.random() - 0.5) * 0.8,
+      position.y + 0.8, position.z + (Math.random() - 0.5) * 0.8);
+    scene.add(particle);
+    effects.push({ mesh: particle, velocity: new THREE.Vector3(
+      (Math.random() - 0.5) * 5, 2 + Math.random() * 3,
+      (Math.random() - 0.5) * 5), remaining: 0.45 + Math.random() * 0.28 });
+  }
+}
+
 function resetGame() {
   if (state.currentCar) interact();
   state.progress = newProgress();
@@ -337,6 +357,8 @@ function moveTraffic(dt) {
       if (Math.abs(vehicle.z) > CITY_LIMIT) vehicle.z = -Math.sign(vehicle.z) * (CITY_LIMIT - 3);
     }
     vehicle.mesh.position.set(vehicle.x, 0, vehicle.z);
+    for (const wheel of vehicle.mesh.userData.wheels) wheel.rotation.x +=
+      vehicle.velocity * vehicle.direction * dt / 0.48;
     vehicle.body.position.set(vehicle.x, 0.9, vehicle.z);
     vehicle.body.velocity.set(0, 0, 0);
   }
@@ -363,6 +385,7 @@ function movePlayer(dt) {
     const car = state.currentCar;
     const throttle = THREE.MathUtils.clamp(vertical, -1, 1);
     const turn = THREE.MathUtils.clamp(horizontal, -1, 1);
+    car.steer = turn;
     car.speed += throttle * (throttle > 0 ? 17 : 11) * dt;
     car.speed *= Math.exp(-(keys.has('Space') ? 4.2 : 0.57) * dt);
     car.speed = THREE.MathUtils.clamp(car.speed, -9, 28);
@@ -432,8 +455,9 @@ function moveProjectiles(dt) {
     shot.mesh.position.addScaledVector(shot.direction, dt * 43);
     let hit = false;
     for (const officer of officers) {
-      if (shot.mesh.position.distanceTo(officer.mesh.position.clone().addScalar(0)) < 2) {
+      if (shot.mesh.position.distanceTo(officer.mesh.position) < 2) {
         officer.stunned = 4;
+        burst(shot.mesh.position);
         hit = true;
         break;
       }
@@ -444,6 +468,7 @@ function moveProjectiles(dt) {
       if (separation < 0.9 && shot.mesh.position.y < 2.4) {
         person.stunned = 3;
         raiseWanted();
+        burst(shot.mesh.position);
         hit = true;
         break;
       }
@@ -457,16 +482,52 @@ function moveProjectiles(dt) {
   }
 }
 
+function moveEffects(dt) {
+  for (let i = effects.length - 1; i >= 0; i--) {
+    const effect = effects[i];
+    effect.remaining -= dt;
+    effect.velocity.y -= 10 * dt;
+    effect.mesh.position.addScaledVector(effect.velocity, dt);
+    effect.mesh.scale.setScalar(Math.max(0.05, Math.min(1, effect.remaining * 2)));
+    if (effect.remaining <= 0) {
+      scene.remove(effect.mesh);
+      effects.splice(i, 1);
+    }
+  }
+}
+
 function syncModels(dt) {
   if (!state.currentCar) {
     world.actor.position.set(player.position.x, player.position.y - 0.94,
       player.position.z);
+    const { head, arms, legs, tail } = world.actor.userData.rig;
+    const speed = Math.hypot(player.velocity.x, player.velocity.z);
+    const movement = Math.min(1, speed / 6);
+    const phase = state.elapsed * (speed > 8 ? 13 : 10);
+    const stride = Math.sin(phase) * movement;
+    for (let i = 0; i < 2; i++) {
+      const direction = i === 0 ? -1 : 1;
+      legs[i].rotation.x = THREE.MathUtils.damp(legs[i].rotation.x,
+        stride * direction * 0.55, 11, dt);
+      arms[i].rotation.x = THREE.MathUtils.damp(arms[i].rotation.x,
+        -stride * direction * 0.48, 11, dt);
+    }
+    head.rotation.z = Math.sin(state.elapsed * 1.7) * 0.035;
+    head.rotation.x = movement * 0.055;
+    tail.rotation.y = Math.sin(state.elapsed * 3.6) * (0.14 + movement * 0.11);
+    world.actor.position.y += movement * Math.abs(Math.sin(phase)) * 0.075;
     if (player.position.y < -9) respawn();
   }
   for (const car of world.cars) {
     car.mesh.position.set(car.body.position.x, car.body.position.y - 0.89,
       car.body.position.z);
     car.mesh.rotation.y = car.yaw;
+    car.mesh.rotation.z = THREE.MathUtils.damp(car.mesh.rotation.z,
+      state.currentCar === car ? -car.steer * Math.min(Math.abs(car.speed), 20) * 0.0025 : 0,
+      6, dt);
+    for (const wheel of car.mesh.userData.wheels) wheel.rotation.x += car.speed * dt / 0.48;
+    car.mesh.userData.brakeLights.emissiveIntensity = state.currentCar === car &&
+      keys.has('Space') ? 1.6 : 0.34;
   }
   for (const officer of officers) officer.mesh.position.set(officer.body.position.x,
     officer.body.position.y - 0.78, officer.body.position.z);
@@ -486,20 +547,37 @@ function moveCamera(dt) {
     state.cameraYaw += diff * Math.min(1, dt * 2.5);
   }
   const distance = state.cameraDistance * (state.currentCar ? 1.4 : 1);
-  const height = state.currentCar ? 5.6 : 4.6;
-  const targetY = state.currentCar ? 1.5 : 1.7;
+  const height = state.currentCar ? 5.1 : 3.85;
+  const targetY = state.currentCar ? 1.5 : 1.95;
   const desiredCamera = new THREE.Vector3(pos.x + Math.sin(state.cameraYaw) * distance,
     pos.y + height, pos.z + Math.cos(state.cameraYaw) * distance);
   desiredCamera.x = THREE.MathUtils.clamp(desiredCamera.x, -CITY_LIMIT - 40, CITY_LIMIT + 40);
   desiredCamera.z = THREE.MathUtils.clamp(desiredCamera.z, -CITY_LIMIT - 55, CITY_LIMIT + 40);
-  cameraPosition.lerp(desiredCamera, Math.min(1, dt * 7));
-  cameraLook.lerp(new THREE.Vector3(pos.x, targetY + (pos.y - 0.9), pos.z),
-    Math.min(1, dt * 10));
+  const viewTarget = new THREE.Vector3(pos.x, targetY + (pos.y - 0.9), pos.z);
+  const ray = new CANNON.RaycastResult();
+  physics.raycastClosest(new CANNON.Vec3(viewTarget.x, viewTarget.y, viewTarget.z),
+    new CANNON.Vec3(desiredCamera.x, desiredCamera.y, desiredCamera.z),
+    { skipBackfaces: true }, ray);
+  if (ray.hasHit && ray.body.type === CANNON.Body.STATIC &&
+      ray.body.shapes[0] instanceof CANNON.Box) {
+    const direction = desiredCamera.clone().sub(viewTarget).normalize();
+    desiredCamera.set(ray.hitPointWorld.x, ray.hitPointWorld.y, ray.hitPointWorld.z)
+      .addScaledVector(direction, -0.65);
+  }
+  state.cameraShake *= Math.exp(-dt * 9);
+  desiredCamera.x += Math.sin(state.elapsed * 83) * state.cameraShake;
+  desiredCamera.y += Math.sin(state.elapsed * 61) * state.cameraShake * 0.58;
+  cameraPosition.lerp(desiredCamera, Math.min(1, dt * 9));
+  cameraLook.lerp(viewTarget, Math.min(1, dt * 10));
   camera.position.copy(cameraPosition);
   camera.lookAt(cameraLook);
-  sun.position.set(pos.x + 95, 145, pos.z + 35);
+  const wantedFov = state.currentCar ? 65 + Math.min(Math.abs(state.currentCar.speed), 27) * 0.28 : 65;
+  camera.fov = THREE.MathUtils.damp(camera.fov, wantedFov, 3, dt);
+  camera.updateProjectionMatrix();
+  sun.position.set(pos.x - 110, 112, pos.z + 75);
   sun.target.position.set(pos.x, 0, pos.z);
   sun.target.updateMatrixWorld();
+  atmosphere.update(camera.position, state.elapsed);
 }
 
 function updateWorld(dt) {
@@ -513,6 +591,7 @@ function updateWorld(dt) {
   physics.step(1 / 60, dt, 6);
   syncModels(dt);
   moveProjectiles(dt);
+  moveEffects(dt);
   const pos = getPosition();
   const event = advanceMission(state.progress, pos.x, pos.z, dt);
   if (event) {
@@ -582,7 +661,7 @@ function drawMap(canvas, expanded = false) {
   context.fillRect(-300, -480, 600, 174);
   context.fillStyle = '#e7d99e';
   context.fillRect(-300, -325, 600, 19);
-  const parks = new Set(['-2,1', '2,-2', '1,1', '-3,-3']);
+  const parks = new Set(['-2,1', '2,-2', '1,1', '-3,-3', '-1,0']);
   for (let i = -4; i < 4; i++) {
     for (let j = -4; j < 4; j++) {
       const x = (i + 0.5) * ROAD_STEP;
@@ -833,13 +912,10 @@ if (import.meta.env.DEV) {
     snapshot: () => ({ x: getPosition().x, z: getPosition().z,
       stage: state.progress.stage, cash: state.progress.cash, wanted: state.wanted,
       health: state.health, car: Boolean(state.currentCar), pedestrians: world.people.length,
-      frames: state.frames, elapsed: state.elapsed, y: player.position.y,
-      velocity: [player.velocity.x, player.velocity.z], pressed: [...keys],
-      contacts: physics.contacts.filter((contact) => contact.bi === player ||
-        contact.bj === player).map((contact) => ({
-        mass: contact.bi === player ? contact.bj.mass : contact.bi.mass,
-        type: (contact.bi === player ? contact.bj.shapes[0] : contact.bi.shapes[0])?.type,
-      })) }),
+      stride: Math.abs(world.actor.userData.rig.legs[0].rotation.x) +
+        Math.abs(world.actor.userData.rig.legs[1].rotation.x),
+      wheelAngle: state.currentCar?.mesh.userData.wheels[0].rotation.x ?? null,
+      pressed: [...keys] }),
     teleport: (x, z) => {
       if (state.currentCar) interact();
       player.position.set(x, 1.2, z);
