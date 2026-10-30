@@ -1,37 +1,74 @@
 export const STORY = [
-  { id: 'dessert', letter: 'S', title: '街角的甜点', color: '#ffd064',
+  { id: 'fixup', letter: 'Q', title: '第一单', giver: '小七', color: '#ffd064',
+    intro: '车行今天没活儿，帮我跑一趟腿，钱不会少你的。',
+    outro: '干得不错。往后有活儿，我第一个想到你。',
     steps: [
-      { type: 'reach', x: 72, z: 72, radius: 8, text: '前往街角甜甜圈店领取包裹' },
-      { type: 'reach', x: -144, z: 144, radius: 8, text: '把包裹送到绿荫公园',
+      { type: 'reach', x: 72, z: 72, radius: 8, text: '去甜甜圈店把货取回来' },
+      { type: 'reach', x: -144, z: 144, radius: 8, text: '把货送到绿荫公园',
         duration: 110, reward: 180 },
     ] },
-  { id: 'express', letter: 'W', title: '海风速递', color: '#69c4c8',
+  { id: 'express', letter: 'W', title: '海风速递', giver: '阿飞', color: '#69c4c8',
+    intro: '游戏厅那帮人订的货没人敢送，你去接，出了事算我的。',
+    outro: '敢跑夜路的人不多，你算一个。',
     steps: [
-      { type: 'reach', x: -144, z: -144, radius: 8, text: '去海风游戏厅接新订单' },
+      { type: 'reach', x: -144, z: -144, radius: 8, text: '去海风游戏厅接订单' },
       { type: 'reach', x: 144, z: -144, radius: 8, text: '送到海滨舞台',
         duration: 125, reward: 260 },
     ] },
-  { id: 'heist', letter: 'M', title: '便利店风云', color: '#7fd4a2',
+  { id: 'heist', letter: 'M', title: '便利店风云', giver: '老K', color: '#7fd4a2',
+    intro: '这店欠保护费欠了三个月，收上来，别客气。',
+    outro: '钱我数过了，一分不少。你有种。',
     steps: [
       { type: 'reach', x: 82, z: 110, radius: 9, text: '去 24/7 便利店找店长' },
-      { type: 'rob', x: 82, z: 110, radius: 9, text: '抢下收银台的现金',
+      { type: 'rob', x: 82, z: 110, radius: 9, text: '把收银台的钱全部收走',
         reward: 450, wanted: 3 },
       { type: 'escape', text: '甩掉警察，让通缉清零' },
-      { type: 'reach', x: -144, z: 144, radius: 8, text: '把现金交给绿荫公园的同伙',
+      { type: 'reach', x: -144, z: 144, radius: 8, text: '把钱送到绿荫公园交账',
         reward: 620 },
     ] },
-  { id: 'race', letter: 'R', title: '夜路狂飙', color: '#ff9b6a',
+  { id: 'race', letter: 'R', title: '夜路狂飙', giver: '小美', color: '#ff9b6a',
+    intro: '今晚的赌注很大，别让我输。',
+    outro: '你踩油门的样子，挺好看的。',
     steps: [
       { type: 'race', text: '限时冲过全部检查点', duration: 85, reward: 800,
         points: [{ x: 144, z: 72 }, { x: 144, z: 216 }, { x: 216, z: 216 },
           { x: 216, z: 144 }, { x: 216, z: -36 }] },
     ] },
-  { id: 'revenue', letter: 'A', title: '最后的账', color: '#ff6f6a',
+  { id: 'revenue', letter: 'A', title: '最后的账', giver: '阿呆', color: '#ff6f6a',
+    intro: '码头老陈吞了我们一批货，把他的人一起清掉。',
+    outro: '账清了。这城市现在有一半是你的。',
     steps: [
       { type: 'kill', text: '解决码头的目标人物',
         target: { x: -216, z: -144, name: '码头老陈' }, count: 1, wanted: 2 },
       { type: 'escape', text: '离开现场，让通缉清零' },
-      { type: 'reach', x: 216, z: 0, radius: 9, text: '回修理站结算', reward: 1500 },
+      { type: 'reach', x: 216, z: 0, radius: 9, text: '回修理站结账', reward: 1500 },
+    ] },
+  { id: 'turf', letter: 'T', title: '地盘清场', giver: '阿呆', color: '#c98bff',
+    intro: '北街那帮人三个月没收过保护费了，去把场子拿回来。',
+    outro: '北街归我们了。这条街从此姓奶。',
+    steps: [
+      { type: 'kill', text: '清掉北街的两个看场子的人',
+        target: { x: -144, z: -72, name: '北街看场的' }, count: 2, wanted: 3 },
+      { type: 'escape', text: '警察上来了，先把通缉甩掉' },
+      { type: 'reach', x: 216, z: 0, radius: 9, text: '回修理站报账', reward: 1200 },
+    ] },
+  { id: 'escort', letter: 'E', title: '深夜护送', giver: '小七', color: '#8ad2ff',
+    intro: '有个客人今晚必须安全到海边，路上别停。',
+    outro: '客人很满意。这份人情我记下了。',
+    steps: [
+      { type: 'reach', x: -216, z: 72, radius: 8, text: '去西门接上客人' },
+      { type: 'reach', x: 216, z: -216, radius: 8, text: '在天亮前送到海边',
+        duration: 95, reward: 900 },
+    ] },
+  { id: 'throne', letter: 'K', title: '王座', giver: '大橙子', color: '#ff5f5f',
+    intro: '最后一个人挡在王座上。今晚之后，没有人敢再收你的钱。',
+    outro: '从今天起，这座城市的规矩你说了算。',
+    steps: [
+      { type: 'reach', x: 216, z: 216, radius: 9, text: '去城北的顶层公寓' },
+      { type: 'kill', text: '解决城北头目',
+        target: { x: 144, z: 216, name: '城北头目' }, count: 1, wanted: 4 },
+      { type: 'escape', text: '整座城市的警察都出动了' },
+      { type: 'reach', x: 216, z: 0, radius: 9, text: '回修理站坐上王座', reward: 3000 },
     ] },
 ];
 
@@ -159,7 +196,7 @@ export function advanceMission(progress, x, z, dt, context = {}) {
       progress.step = 0;
       progress.checkpoint = 0;
       beginStep(progress, mission.steps[0]);
-      return { type: 'failed', mission, text: '配送超时，回到起点重新接单' };
+      return { type: 'failed', mission, text: '时间到了，回去重新接单' };
     }
   }
   if (Math.hypot(x - step.x, z - step.z) > (step.radius ?? 7.5)) return null;

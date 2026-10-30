@@ -4,6 +4,53 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+
+const SunRaysShader = {
+  defines: { SAMPLES: 16 },
+  uniforms: {
+    tDiffuse: { value: null },
+    sunPosition: { value: new THREE.Vector2(0.5, 0.9) },
+    strength: { value: 0 },
+    threshold: { value: 1.05 },
+    density: { value: 0.85 },
+    decay: { value: 0.955 },
+    weight: { value: 0.16 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform vec2 sunPosition;
+    uniform float strength;
+    uniform float threshold;
+    uniform float density;
+    uniform float decay;
+    uniform float weight;
+    varying vec2 vUv;
+
+    void main() {
+      vec3 base = texture2D(tDiffuse, vUv).rgb;
+      vec2 delta = (sunPosition - vUv) * density / float(SAMPLES);
+      vec2 uv = vUv;
+      vec3 rays = vec3(0.0);
+      float falloff = 1.0;
+      for (int i = 0; i < SAMPLES; i++) {
+        uv += delta;
+        vec3 lit = max(texture2D(tDiffuse, clamp(uv, vec2(0.0), vec2(1.0))).rgb -
+          threshold, 0.0);
+        rays += lit * falloff;
+        falloff *= decay;
+      }
+      gl_FragColor = vec4(base + rays * weight * strength, 1.0);
+    }
+  `,
+};
 
 const GradeShader = {
   uniforms: {
@@ -88,11 +135,25 @@ export function createPostFX(renderer, scene, camera) {
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.3, 0.55, 0.86);
+  // Grounded ambient occlusion: without it cars and pedestrians float on a flat
+  // wash of light, which is the single biggest tell that a scene is not AAA.
+  const gtao = new GTAOPass(scene, camera, 1, 1);
+  gtao.output = GTAOPass.OUTPUT.Default;
+  gtao.updateGtaoMaterial({ radius: 1.6, distanceExponent: 1.1, thickness: 1.4,
+    distanceFallOff: 1, scale: 1, samples: 16 });
+  gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6,
+    rings: 2, samples: 16 });
+  composer.addPass(gtao);
+  const sunrays = new ShaderPass(SunRaysShader);
+  sunrays.enabled = false;
+  composer.addPass(sunrays);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.38, 0.62, 0.8);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
   const grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
+
+  const aoScale = 0.5;
 
   function rebuildTargets() {
     const width = composer._width * composer._pixelRatio;
@@ -108,6 +169,8 @@ export function createPostFX(renderer, scene, camera) {
       rebuildTargets();
     }
     bloom.enabled = quality === 'high';
+    gtao.enabled = quality === 'high';
+    gtao.blendIntensity = 0.9;
     grade.uniforms.grain.value = quality === 'high' ? 0.008 : 0.005;
     grade.uniforms.aberration.value = quality === 'high' ? 0.0016 : 0;
   }
@@ -119,9 +182,20 @@ export function createPostFX(renderer, scene, camera) {
       quality = option === 'low' ? 'low' : option === 'medium' ? 'medium' : 'high';
       applyQuality();
     },
+    setSunrays(position, strength) {
+      if (quality !== 'high' || !position || strength <= 0.012) {
+        sunrays.enabled = false;
+        return;
+      }
+      sunrays.enabled = true;
+      sunrays.uniforms.sunPosition.value.set(position.x, position.y);
+      sunrays.uniforms.strength.value = strength;
+    },
     setSize(width, height, pixelRatio) {
       composer.setPixelRatio(pixelRatio);
       composer.setSize(width, height);
+      gtao.setSize(Math.max(1, Math.round(width * pixelRatio * aoScale)),
+        Math.max(1, Math.round(height * pixelRatio * aoScale)));
     },
     render(dt, elapsed) {
       grade.uniforms.time.value = elapsed;

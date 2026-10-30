@@ -230,7 +230,9 @@ function building(scene, physics, rng, x, z, width, depth, height, district, win
   const palette = palettes[Math.floor(rng() * palettes.length)];
   const style = Math.floor(rng() * 3);
   const facade = new THREE.MeshStandardMaterial({ color: palette[0],
-    map: surfaces.facades[style], roughness: style === 2 ? 0.3 : 0.82,
+    map: surfaces.facades[style], normalMap: surfaces.facadeNormals[style],
+    normalScale: new THREE.Vector2(0.55, 0.55),
+    roughness: style === 2 ? 0.3 : 0.82,
     metalness: style === 2 ? 0.42 : 0.04 });
   const border = palette[1];
   const structure = cube(scene, facade, x, height / 2, z, width, height, depth);
@@ -667,8 +669,9 @@ export function makeCar(scene, color, x, z, yaw = 0, type = 'city') {
   }
   let paintMaterial = carPaintMaterials.get(color);
   if (!paintMaterial) {
-    paintMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.26,
-      metalness: 0.28 });
+    paintMaterial = new THREE.MeshPhysicalMaterial({ color, roughness: 0.3,
+      metalness: 0.42, clearcoat: 1, clearcoatRoughness: 0.08,
+      envMapIntensity: 1.35 });
     carPaintMaterials.set(color, paintMaterial);
   }
   const body = mesh(geometry.paint, paintMaterial, group, 0, 0, 0);
@@ -739,19 +742,19 @@ function fabricNoise() {
   return fabricTexture;
 }
 
-function dragon(scene) {
+function dragon(scene, palette = {}) {
   const group = new THREE.Group();
   const cloth = fabricNoise();
-  const yellow = mat('#fbd340', 0.64);
+  const yellow = mat(palette.body ?? '#fbd340', 0.64);
   yellow.map = cloth;
   yellow.bumpMap = cloth;
   yellow.bumpScale = 0.04;
-  const pale = mat('#ffefae', 0.74);
+  const pale = mat(palette.belly ?? '#ffefae', 0.74);
   pale.map = cloth;
   pale.bumpMap = cloth;
   pale.bumpScale = 0.03;
-  const orange = mat('#eb9a54', 0.64);
-  const blush = mat('#ed9990');
+  const orange = mat(palette.accent ?? '#eb9a54', 0.64);
+  const blush = mat(palette.blush ?? '#ed9990');
   const black = mat('#20383a', 0.19);
   function sphere(parent, material, x, y, z, sx, sy, sz) {
     const part = mesh(new THREE.SphereGeometry(1, 32, 22), material, parent, x, y, z);
@@ -818,11 +821,16 @@ export function createWorld(scene, physics) {
   const colliders = [];
   const surfaces = createSurfaces();
   const roadVertical = new THREE.MeshStandardMaterial({ map: surfaces.roadVertical,
-    color: '#f6f7f5', roughness: 1 });
+    normalMap: surfaces.roadVerticalNormal, normalScale: new THREE.Vector2(0.42, 0.42),
+    roughnessMap: surfaces.roadVerticalRoughness, roughness: 1, metalness: 0.05,
+    envMapIntensity: 1.15, color: '#ffffff' });
   const roadHorizontal = new THREE.MeshStandardMaterial({ map: surfaces.roadHorizontal,
-    color: '#f6f7f5', roughness: 1 });
+    normalMap: surfaces.roadHorizontalNormal, normalScale: new THREE.Vector2(0.42, 0.42),
+    roughnessMap: surfaces.roadHorizontalRoughness, roughness: 1, metalness: 0.05,
+    envMapIntensity: 1.15, color: '#ffffff' });
   const pavement = new THREE.MeshStandardMaterial({ map: surfaces.pavement,
-    color: '#f7f6ee', roughness: 0.98 });
+    normalMap: surfaces.pavementNormal, normalScale: new THREE.Vector2(0.45, 0.45),
+    color: '#f7f6ee', roughness: 0.94, envMapIntensity: 0.9 });
   const ground = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
   ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
   physics.addBody(ground);
@@ -1067,7 +1075,64 @@ export function createWorld(scene, physics) {
       speed: 0.65 + rng() * 0.45, stunned: 0 });
   }
   const actor = dragon(scene);
+  const cast = createCast(scene);
   flushSigns(scene);
-  return { actor, cars, traffic, people, garage: GARAGE, lamps, windowMaterials,
+  return { actor, cast, cars, traffic, people, garage: GARAGE, lamps, windowMaterials,
     colliders };
+}
+
+// Named characters stand at their own spots so a mission reads as "someone wants
+// something from you" instead of a floating objective with no face behind it.
+const CAST_DEFS = [
+  { name: '小七', role: '修车铺', x: 208, z: 6, yaw: -2.3,
+    palette: { body: '#fbd340', belly: '#ffefae', accent: '#eb9a54' } },
+  { name: '阿飞', role: '快递站', x: -150, z: -136, yaw: 0.9,
+    palette: { body: '#66cfd2', belly: '#d8f7f4', accent: '#2f8f96' } },
+  { name: '老K', role: '杂货铺', x: 88, z: 104, yaw: 2.4,
+    palette: { body: '#8a7ad6', belly: '#ded7ff', accent: '#5a4bb0' } },
+  { name: '小美', role: '夜店', x: 150, z: 64, yaw: -1.1,
+    palette: { body: '#ff8fb8', belly: '#ffe0ec', accent: '#d4527f' } },
+  { name: '阿呆', role: '码头', x: -222, z: -136, yaw: 0.4,
+    palette: { body: '#8f9aa6', belly: '#dfe4e8', accent: '#5d6874' } },
+  { name: '大橙子', role: '顶层公寓', x: 222, z: 210, yaw: -2.6,
+    palette: { body: '#ffa04a', belly: '#ffe2bd', accent: '#c85f1b' } },
+];
+
+function nameTag(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(14, 26, 28, 0.82)';
+  ctx.fillRect(0, 8, 256, 48);
+  ctx.fillStyle = '#ffd36a';
+  ctx.fillRect(0, 8, 5, 48);
+  ctx.fillStyle = '#f6f1e4';
+  ctx.font = 'bold 30px "Microsoft YaHei", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 130, 33);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture,
+    transparent: true, depthWrite: false, fog: false }));
+  sprite.scale.set(2.4, 0.6, 1);
+  return sprite;
+}
+
+function createCast(scene) {
+  return CAST_DEFS.map((def) => {
+    const model = dragon(scene, def.palette);
+    model.position.set(def.x, 0, def.z);
+    model.rotation.y = def.yaw;
+    const shadow = contactShadow();
+    shadow.position.y = 0.055;
+    shadow.scale.set(1.9, 1.9, 1);
+    model.add(shadow);
+    const tag = nameTag(def.name);
+    tag.position.set(0, 3.5, 0);
+    model.add(tag);
+    return { name: def.name, role: def.role, mesh: model, tag,
+      x: def.x, z: def.z, baseY: 0 };
+  });
 }

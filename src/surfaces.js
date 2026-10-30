@@ -5,16 +5,54 @@ function random(seed) {
   return () => ((value = (Math.imul(value, 1664525) + 1013904223) >>> 0) / 4294967296);
 }
 
-function texture(size, paint, repeatX = 1, repeatY = 1) {
+function canvasEl(size, paint) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   paint(canvas.getContext('2d'), size);
+  return canvas;
+}
+
+function textureOf(canvas, repeatX = 1, repeatY = 1,
+  colorSpace = THREE.SRGBColorSpace) {
   const result = new THREE.CanvasTexture(canvas);
-  result.colorSpace = THREE.SRGBColorSpace;
+  result.colorSpace = colorSpace;
   result.wrapS = result.wrapT = THREE.RepeatWrapping;
   result.repeat.set(repeatX, repeatY);
   result.anisotropy = 8;
   return result;
+}
+
+function texture(size, paint, repeatX = 1, repeatY = 1) {
+  return textureOf(canvasEl(size, paint), repeatX, repeatY);
+}
+
+// Tangent-space normals derived from the painted surface, so asphalt and paving
+// joints catch the sun instead of reading as flat coloured planes.
+function normalFrom(source, strength) {
+  const size = source.width;
+  const sourceData = source.getContext('2d').getImageData(0, 0, size, size).data;
+  const mask = size - 1;
+  const luma = (x, y) => {
+    const index = ((y & mask) * size + (x & mask)) * 4;
+    return (sourceData[index] * 0.299 + sourceData[index + 1] * 0.587 +
+      sourceData[index + 2] * 0.114) / 255;
+  };
+  return canvasEl(size, (ctx) => {
+    const image = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const nx = (luma(x - 1, y) - luma(x + 1, y)) * strength;
+        const ny = (luma(x, y - 1) - luma(x, y + 1)) * strength;
+        const length = Math.hypot(nx, ny, 1);
+        const index = (y * size + x) * 4;
+        image.data[index] = (nx / length * 0.5 + 0.5) * 255;
+        image.data[index + 1] = (ny / length * 0.5 + 0.5) * 255;
+        image.data[index + 2] = (1 / length * 0.5 + 0.5) * 255;
+        image.data[index + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+  });
 }
 
 function grain(ctx, size, seed, count, colors) {
@@ -27,14 +65,14 @@ function grain(ctx, size, seed, count, colors) {
 }
 
 const asphaltCanvas = (ctx, size) => {
-  ctx.fillStyle = '#555c60';
+  ctx.fillStyle = '#73797c';
   ctx.fillRect(0, 0, size, size);
-  grain(ctx, size, 9802, 5600, ['#4b5256', '#5d6468', '#575e62', '#464c50', '#666d70']);
+  grain(ctx, size, 9802, 5600, ['#696f72', '#7b8184', '#757b7e', '#646a6d', '#83898c']);
   const next = random(651);
   ctx.lineWidth = 1;
   for (let i = 0; i < 11; i++) {
-    ctx.strokeStyle = i % 3 ? '#2c3437' : '#6b7477';
-    ctx.globalAlpha = 0.14;
+    ctx.strokeStyle = i % 3 ? '#4d5457' : '#8b9295';
+    ctx.globalAlpha = 0.11;
     ctx.beginPath();
     let x = next() * size;
     let y = next() * size;
@@ -46,13 +84,38 @@ const asphaltCanvas = (ctx, size) => {
     }
     ctx.stroke();
   }
-  ctx.globalAlpha = 0.07;
+  ctx.globalAlpha = 0.055;
   for (let i = 0; i < 6; i++) {
-    ctx.fillStyle = i % 2 ? '#5f686a' : '#333a3d';
+    ctx.fillStyle = i % 2 ? '#828a8c' : '#5b6265';
     const radius = 28 + next() * 52;
     ctx.beginPath();
     ctx.arc(next() * size, next() * size, radius, 0, Math.PI * 2);
     ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+};
+
+// Polished tar and oil stains are what make a road look wet in the light; without a
+// roughness map the whole surface is a uniform matte grey.
+const asphaltRoughnessCanvas = (ctx, size) => {
+  ctx.fillStyle = '#cfcfcf';
+  ctx.fillRect(0, 0, size, size);
+  const next = random(9142);
+  for (let i = 0; i < 24; i++) {
+    ctx.globalAlpha = 0.22 + next() * 0.3;
+    const shade = 105 + next() * 55;
+    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+    const radius = 14 + next() * 52;
+    ctx.beginPath();
+    ctx.ellipse(next() * size, next() * size, radius, radius * (0.35 + next() * 0.7),
+      next() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 0.45;
+  for (let i = 0; i < 2600; i++) {
+    const shade = 130 + next() * 120;
+    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+    ctx.fillRect(next() * size, next() * size, 2 + next() * 4, 2 + next() * 4);
   }
   ctx.globalAlpha = 1;
 };
@@ -141,12 +204,26 @@ function glassCanvas(lit) {
 }
 
 export function createSurfaces() {
+  const asphalt = canvasEl(512, asphaltCanvas);
+  const asphaltNormal = normalFrom(asphalt, 2.6);
+  const asphaltRoughness = canvasEl(512, asphaltRoughnessCanvas);
+  const pavement = canvasEl(256, pavementCanvas);
+  const pavementNormal = normalFrom(pavement, 2.0);
+  const datamap = (canvas, repeatX, repeatY) =>
+    textureOf(canvas, repeatX, repeatY, THREE.NoColorSpace);
+  const facades = [canvasEl(512, stuccoCanvas), canvasEl(512, brickCanvas),
+    canvasEl(512, tileCanvas)];
   return {
-    roadVertical: texture(512, asphaltCanvas, 1, 42),
-    roadHorizontal: texture(512, asphaltCanvas, 42, 1),
-    pavement: texture(256, pavementCanvas, 7, 7),
-    facades: [texture(256, stuccoCanvas, 2, 4), texture(256, brickCanvas, 2, 4),
-      texture(256, tileCanvas, 2, 4)],
+    roadVertical: textureOf(asphalt, 1, 42),
+    roadHorizontal: textureOf(asphalt, 42, 1),
+    roadVerticalNormal: datamap(asphaltNormal, 1, 42),
+    roadHorizontalNormal: datamap(asphaltNormal, 42, 1),
+    roadVerticalRoughness: datamap(asphaltRoughness, 1, 42),
+    roadHorizontalRoughness: datamap(asphaltRoughness, 42, 1),
+    pavement: textureOf(pavement, 7, 7),
+    pavementNormal: datamap(pavementNormal, 7, 7),
+    facades: facades.map((canvas) => textureOf(canvas, 2, 4)),
+    facadeNormals: facades.map((canvas) => datamap(normalFrom(canvas, 1.5), 2, 4)),
     windows: [texture(128, glassCanvas(false)), texture(128, glassCanvas(true))],
   };
 }

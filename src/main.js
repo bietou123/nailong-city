@@ -34,6 +34,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.16;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
 const postfx = createPostFX(renderer, scene, camera);
 let qualityLevel = 'high';
 let basePixelRatio = 1;
@@ -42,6 +43,10 @@ const frameGaps = new Float32Array(90);
 let gapCount = 0;
 let gapIndex = 0;
 let pacingAt = 0;
+let daylight = { hours: 10, day: 1, sunset: 0, night: 0 };
+const sunScreen = new THREE.Vector3();
+const sunProbe = new THREE.Vector3();
+const viewDir = new THREE.Vector3();
 
 function skyEnvironment() {
   const surface = document.createElement('canvas');
@@ -85,7 +90,8 @@ sun.shadow.camera.top = 70;
 sun.shadow.camera.bottom = -70;
 sun.shadow.camera.near = 10;
 sun.shadow.camera.far = 360;
-sun.shadow.bias = -0.001;
+sun.shadow.bias = -0.0008;
+sun.shadow.normalBias = 0.03;
 scene.add(sun);
 const fill = new THREE.DirectionalLight('#8fb6ff', 0.45);
 fill.position.set(120, 70, -160);
@@ -153,10 +159,16 @@ const police = createPolice(scene, physics, {
   makeCar,
   onDamage: (amount) => hurt(amount),
 });
+for (const person of world.cast) {
+  const spot = freeSpot(person.x, person.z, 1.1);
+  person.x = spot.x;
+  person.z = spot.z;
+  person.mesh.position.set(spot.x, 0, spot.z);
+}
 const dayNight = createDayNight({ scene, sun, hemisphere: sky, fog: scene.fog,
   atmosphere, lamps: world.lamps, windowMaterials: world.windowMaterials,
   shopLamps: shops.lampMaterials, lightPools: lampPools, glows: lampGlows,
-  startHour: 17.2 });
+  startHour: 15.3 });
 
 const player = new CANNON.Body({ mass: 65, shape: new CANNON.Sphere(0.62),
   material: new CANNON.Material({ friction: 0.2 }), linearDamping: 0.55 });
@@ -193,7 +205,8 @@ const state = {
   stats: { kills: 0, missions: 0, crimes: 0, distance: 0 },
   targetUnits: [], targetsDead: 0, targetSpawned: '',
   shop: null, bannerUntil: 0, statusFlashUntil: 0, damageFlashUntil: 0,
-  lastJob: 0, missionBannerShown: false, radioHint: false,
+  dialogueUntil: 0,
+  lastJob: -1, missionBannerShown: false, radioHint: false,
   footstepTimer: 0, distanceAccumulator: 0, lastPosition: null,
   safePosition: { x: 0, z: 7 },
 };
@@ -316,6 +329,14 @@ function showBanner(kicker, title, letter) {
   $('banner-letter').textContent = letter ?? 'N';
   $('banner').classList.remove('hidden');
   state.bannerUntil = state.elapsed + 3.2;
+}
+
+function showDialogue(speaker, line, seconds = 5.4) {
+  if (!line) return;
+  $('dialogue-speaker').textContent = speaker;
+  $('dialogue-line').textContent = line;
+  $('dialogue').classList.remove('hidden');
+  state.dialogueUntil = state.elapsed + seconds;
 }
 
 function showStatusFlash(text) {
@@ -1208,6 +1229,21 @@ function syncModels(dt) {
     world.actor.position.y += movement * Math.abs(Math.sin(phase)) * 0.075;
     if (player.position.y < -9) downed();
   }
+  for (const person of world.cast) {
+    const dx = player.position.x - person.x;
+    const dz = player.position.z - person.z;
+    if (dx * dx + dz * dz < 625) {
+      const face = Math.atan2(dx, dz);
+      const turn = Math.atan2(Math.sin(face - person.mesh.rotation.y),
+        Math.cos(face - person.mesh.rotation.y));
+      person.mesh.rotation.y += turn * Math.min(1, dt * 3.4);
+    }
+    const { head, arms, tail } = person.mesh.userData.rig;
+    const breathe = Math.sin(state.elapsed * 1.4 + person.x) * 0.03;
+    head.rotation.z = breathe;
+    arms[0].rotation.x = Math.sin(state.elapsed * 1.1 + person.z) * 0.06;
+    tail.rotation.y = Math.sin(state.elapsed * 1.6 + person.x * 0.5) * 0.12;
+  }
   const night = dayNight.isNight;
   for (const car of world.cars) {
     if (car.dead) continue;
@@ -1298,6 +1334,28 @@ function moveCamera(dt) {
   camera.updateProjectionMatrix();
 }
 
+// Screen-space shafts work from the sun's NDC position, so the pass only earns its
+// cost when the sun is actually in frame instead of burning a full-res blur every frame.
+function updateSunrays() {
+  const direction = atmosphere.sunDirection;
+  camera.getWorldDirection(viewDir);
+  const facing = viewDir.dot(direction);
+  if (facing < 0.2) {
+    postfx.setSunrays(null, 0);
+    return;
+  }
+  sunProbe.copy(camera.position).addScaledVector(direction, 600).project(camera);
+  if (sunProbe.z > 1 || Math.abs(sunProbe.x) > 1.35 || Math.abs(sunProbe.y) > 1.35) {
+    postfx.setSunrays(null, 0);
+    return;
+  }
+  sunScreen.set(sunProbe.x * 0.5 + 0.5, sunProbe.y * 0.5 + 0.5);
+  const strength = (0.35 + daylight.sunset * 0.75) *
+    THREE.MathUtils.smoothstep(facing, 0.2, 0.75) *
+    THREE.MathUtils.clamp(daylight.day * 1.4, 0, 1);
+  postfx.setSunrays(sunScreen, strength);
+}
+
 function handleMissionEvent(event) {
   if (!event) return;
   toast(event.text, 4);
@@ -1307,13 +1365,21 @@ function handleMissionEvent(event) {
     state.stats.missions++;
     audio.missionStart();
     showBanner('委托完成', event.mission.title, event.mission.letter);
+    showDialogue(event.mission.giver, event.mission.outro);
   }
   if (event.type === 'all-complete') {
     state.stats.missions++;
     audio.missionStart();
     showBanner('全部完成', '城市属于你了', '★');
+    showDialogue(event.mission.giver, event.mission.outro, 7);
   }
   if (event.type === 'failed') showBanner('委托失败', event.mission.title, '!');
+  if (event.type === 'mission-start' || event.type === 'objective') {
+    if (event.mission.intro && state.missionIntroJob !== state.progress.job) {
+      state.missionIntroJob = state.progress.job;
+      showDialogue(event.mission.giver, event.mission.intro, 6.2);
+    }
+  }
   if (event.wanted) raiseWanted(event.wanted);
   if (event.spawnTarget) {
     spawnMissionTarget(event.spawnTarget, event.spawnTarget.count ?? 1);
@@ -1329,6 +1395,7 @@ function updateWorld(dt) {
   state.hurtCooldown = Math.max(0, state.hurtCooldown - dt);
   state.arsenal.update(state.elapsed);
   if (state.elapsed > state.bannerUntil) $('banner').classList.add('hidden');
+  if (state.elapsed > state.dialogueUntil) $('dialogue').classList.add('hidden');
   if (state.elapsed > state.statusFlashUntil) $('status-flash').classList.add('hidden');
   if (state.elapsed > state.damageFlashUntil) $('damage-flash').classList.remove('hit');
   moveTraffic(dt);
@@ -1373,7 +1440,9 @@ function updateWorld(dt) {
   const mission = currentMission(state.progress);
   if (mission && state.lastJob !== state.progress.job) {
     state.lastJob = state.progress.job;
+    state.missionIntroJob = state.progress.job;
     showBanner('新委托', mission.title, mission.letter);
+    showDialogue(mission.giver, mission.intro, 6.4);
     audio.missionStart();
   }
   ensureMissionTargets();
@@ -1423,7 +1492,7 @@ function updateWorld(dt) {
     routeGem.position.y = 7.6 + Math.sin(state.elapsed * 2.8) * 0.48;
     routeRing.scale.setScalar(1 + Math.sin(state.elapsed * 3.6) * 0.08);
   }
-  dayNight.update(dt, { x: position.x, y: 0, z: position.z }, camera.position);
+  daylight = dayNight.update(dt, { x: position.x, y: 0, z: position.z }, camera.position);
   const turnKey = Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'));
   if (turnKey && !state.currentCar) state.cameraYaw -= turnKey * dt * 2.2;
   const pitchKey = Number(keys.has('PageDown')) - Number(keys.has('PageUp'));
@@ -1431,6 +1500,7 @@ function updateWorld(dt) {
     state.cameraPitch - pitchKey * dt * 0.6, -0.35, 0.55);
   if ((turnKey && !state.currentCar) || pitchKey) state.cameraKeyAt = state.elapsed;
   moveCamera(dt);
+  updateSunrays();
   if (state.elapsed >= state.nextSave) {
     state.nextSave = state.elapsed + 4;
     save();
@@ -1547,6 +1617,7 @@ function updateUI() {
   const target = stepTarget(state.progress);
   $('mission-index').textContent = mission ?
     `0${state.progress.job + 1} / 0${TOTAL_MISSIONS}` : '完成';
+  $('mission-giver').textContent = mission ? `${mission.giver} · 委托` : '自由活动';
   $('mission-title').textContent = mission?.title ?? '自由漫游';
   $('mission-description').textContent = mission ?
     missionLabel(step) : '城市属于你了，随便逛逛吧';
@@ -1695,6 +1766,7 @@ function resize() {
 function renderFrame(dt) {
   renderer.info.autoReset = false;
   renderer.info.reset();
+  renderer.shadowMap.needsUpdate = true;
   if (qualityLevel === 'low') renderer.render(scene, camera);
   else postfx.render(dt, state.elapsed);
 }
@@ -1966,6 +2038,21 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
       return true;
     },
     setWanted: (level) => { state.wanted = level; state.wantedCooldown = 35; },
+    cast: () => world.cast.map((person) => ({ name: person.name, x: person.x,
+      z: person.z })),
+    look: (yaw) => { state.cameraYaw = yaw; state.cameraKeyAt = state.elapsed; },
+    inspect: (index) => {
+      const person = world.cast[index];
+      if (!person) return false;
+      const facing = person.mesh.rotation.y;
+      state.paused = true;
+      camera.position.set(person.x + Math.sin(facing) * 4.2, 2.5,
+        person.z + Math.cos(facing) * 4.2);
+      camera.lookAt(person.x, 1.9, person.z);
+      camera.updateMatrixWorld();
+      return true;
+    },
+    resume: () => { state.paused = false; },
     info: () => ({ ...renderer.info.render, elapsed: state.elapsed,
       lights: { sun: +sun.intensity.toFixed(2),
         hemi: +sky.intensity.toFixed(2),

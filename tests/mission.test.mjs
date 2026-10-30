@@ -74,9 +74,21 @@ test('kill target then escape completes the whole story', () => {
   assert.ok(advanceMission(progress, 0, 0, 0.016, { wanted: 0 }));
   assert.equal(progress.step, 2);
   const done = advanceMission(progress, 216, 0, 0.016);
-  assert.equal(done.type, 'all-complete');
+  assert.equal(done.type, 'mission-complete');
   assert.equal(progress.cash, 1500);
   assert.equal(progress.job, 5);
+});
+
+test('the final mission ends the story', () => {
+  const progress = newProgress();
+  progress.job = STORY.length - 1;
+  acceptMission(progress);
+  advanceMission(progress, 216, 216, 0.016);
+  advanceMission(progress, 144, 216, 0.016, { targetsDead: 1 });
+  advanceMission(progress, 0, 0, 0.016, { wanted: 0 });
+  const done = advanceMission(progress, 216, 0, 0.016);
+  assert.equal(done.type, 'all-complete');
+  assert.equal(progress.job, STORY.length);
 });
 
 test('saved progress is validated before restoring', () => {

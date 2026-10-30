@@ -67,36 +67,84 @@ export function createAtmosphere(scene) {
   stars.renderOrder = -1;
   scene.add(stars);
 
+  // Billowed sprites read as real cloud mass; the old ellipsoid puffs looked like
+  // grey pebbles hanging in the sky.
+  const cloudCanvas = document.createElement('canvas');
+  cloudCanvas.width = cloudCanvas.height = 256;
+  const cloudContext = cloudCanvas.getContext('2d');
+  let cloudSeed = 1337;
+  const cloudRandom = () => ((cloudSeed = (Math.imul(cloudSeed, 1664525) + 1013904223) >>> 0) /
+    4294967296);
+  for (let index = 0; index < 28; index++) {
+    const cx = 56 + cloudRandom() * 144;
+    const cy = 104 + cloudRandom() * 62;
+    const radius = 26 + cloudRandom() * 52;
+    const puffs = cloudContext.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    puffs.addColorStop(0, 'rgba(255,255,255,0.34)');
+    puffs.addColorStop(0.55, 'rgba(255,255,255,0.15)');
+    puffs.addColorStop(1, 'rgba(255,255,255,0)');
+    cloudContext.fillStyle = puffs;
+    cloudContext.beginPath();
+    cloudContext.arc(cx, cy, radius, 0, Math.PI * 2);
+    cloudContext.fill();
+  }
+  const cloudTexture = new THREE.CanvasTexture(cloudCanvas);
+  cloudTexture.colorSpace = THREE.SRGBColorSpace;
+
   const clouds = [];
-  const cloudMaterial = new THREE.MeshBasicMaterial({ color: '#e8e7e1', transparent: true,
-    opacity: 0.5, depthWrite: false, fog: false });
+  const cloudMaterial = new THREE.SpriteMaterial({ map: cloudTexture, color: '#e8e7e1',
+    transparent: true, opacity: 0.5, depthWrite: false, fog: false });
   const cloudTint = new THREE.Color('#ffb27a');
-  const cloudGeometry = new THREE.SphereGeometry(1, 12, 7);
   for (let index = 0; index < 14; index++) {
-    const group = new THREE.Group();
     const angle = index * 2.4;
     const distance = 310 + (index % 3) * 55;
-    group.position.set(Math.sin(angle) * distance, 95 + (index % 4) * 17,
+    const cloud = new THREE.Sprite(cloudMaterial);
+    cloud.position.set(Math.sin(angle) * distance, 95 + (index % 4) * 17,
       Math.cos(angle) * distance);
-    for (const [x, y, z, width] of [[0, 0, 0, 19], [-13, -3, 0, 13],
-      [15, -2, 0, 15], [4, 7, -2, 11]]) {
-      const puff = new THREE.Mesh(cloudGeometry, cloudMaterial);
-      puff.position.set(x, y, z);
-      puff.scale.set(width, width * 0.23, width * 0.47);
-      group.add(puff);
-    }
-    scene.add(group);
-    clouds.push(group);
+    cloud.scale.set(150 + (index % 3) * 44, 58 + (index % 4) * 15, 1);
+    scene.add(cloud);
+    clouds.push(cloud);
   }
 
+  const sunCanvas = document.createElement('canvas');
+  sunCanvas.width = sunCanvas.height = 128;
+  const sunContext = sunCanvas.getContext('2d');
+  const sunglow = sunContext.createRadialGradient(64, 64, 0, 64, 64, 64);
+  sunglow.addColorStop(0, 'rgba(255,255,255,1)');
+  sunglow.addColorStop(0.16, 'rgba(255,242,208,0.92)');
+  sunglow.addColorStop(0.4, 'rgba(255,206,148,0.26)');
+  sunglow.addColorStop(1, 'rgba(255,178,120,0)');
+  sunContext.fillStyle = sunglow;
+  sunContext.fillRect(0, 0, 128, 128);
+  const sunTexture = new THREE.CanvasTexture(sunCanvas);
+  sunTexture.colorSpace = THREE.SRGBColorSpace;
+  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTexture,
+    color: '#fff5da', transparent: true, blending: THREE.AdditiveBlending,
+    depthWrite: false, fog: false }));
+  sunSprite.scale.setScalar(170);
+  scene.add(sunSprite);
+
+  const sunDirection = new THREE.Vector3();
+  const sunWarm = new THREE.Color('#fff5da');
+  const sunLow = new THREE.Color('#ff9a54');
+  const sunTint = new THREE.Color();
+
   return {
+    get sunDirection() { return sunDirection; },
     update(cameraPosition, hours = 10, day = 1, sunset = 0) {
       dome.position.copy(cameraPosition);
       stars.position.copy(cameraPosition);
       const angle = (hours - 6) / 24 * Math.PI * 2;
       uniforms.uDay.value = day;
       uniforms.uSunset.value = sunset;
-      uniforms.uSunDir.value.set(Math.cos(angle), Math.sin(angle), 0.55).normalize();
+      sunDirection.set(Math.cos(angle), Math.sin(angle), 0.55).normalize();
+      uniforms.uSunDir.value.copy(sunDirection);
+      sunSprite.position.copy(cameraPosition).addScaledVector(sunDirection, 640);
+      sunSprite.visible = sunDirection.y > -0.06;
+      sunTint.copy(sunWarm).lerp(sunLow, Math.min(1, sunset * 1.25));
+      sunSprite.material.color.copy(sunTint);
+      sunSprite.material.opacity = THREE.MathUtils.clamp(sunDirection.y * 3.4, 0, 1) *
+        (0.5 + sunset * 0.5);
       starMaterial.opacity = (1 - day) * 0.9;
       const brightness = 0.13 + day * 0.87;
       cloudMaterial.color.setRGB(0.96 * brightness, 0.945 * brightness,
