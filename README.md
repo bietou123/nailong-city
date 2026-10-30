@@ -8,7 +8,7 @@
 
 ## 下载运行
 
-[下载 Windows 便携版 EXE](https://github.com/bietou123/nailong-city/releases/download/v0.4.2/Nailong-City-0.4.2-x64.exe)。Windows 10/11 x64 双击即可运行，无需安装 Node.js 或联网。若系统提示未知发布者，需要自行确认文件来源。游戏进度自动保存在本机；首次启动需要可用的图形加速环境。
+[下载 Windows 便携版 EXE](https://github.com/bietou123/nailong-city/releases/download/v0.4.3/Nailong-City-0.4.3-x64.exe)。Windows 10/11 x64 双击即可运行，无需安装 Node.js 或联网。若系统提示未知发布者，需要自行确认文件来源。游戏进度自动保存在本机；首次启动需要可用的图形加速环境。
 
 也可以从源码构建：`npm run dist` 生成的便携版位于 `release/`。
 

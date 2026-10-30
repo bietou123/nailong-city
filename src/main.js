@@ -193,6 +193,9 @@ const state = {
 };
 const cameraPosition = new THREE.Vector3(-4, 6, -9);
 const cameraLook = new THREE.Vector3(0, 2, 5);
+const cameraAnchor = new THREE.Vector3(0, 0.7, 7);
+let cameraBoom = 12;
+const cameraRayEnd = new THREE.Vector3();
 const route = new THREE.Group();
 const routeRing = new THREE.Mesh(new THREE.TorusGeometry(3, 0.16, 10, 40),
   new THREE.MeshBasicMaterial({ color: '#ffd064' }));
@@ -520,6 +523,8 @@ function enterCar(car) {
   car.body.type = CANNON.Body.DYNAMIC;
   car.body.mass = 750;
   car.body.updateMassProperties();
+  car.body.angularFactor.set(0, 0, 0);
+  car.body.angularVelocity.set(0, 0, 0);
   car.body.wakeUp();
   player.type = CANNON.Body.KINEMATIC;
   player.collisionResponse = false;
@@ -1101,6 +1106,7 @@ function movePlayer(dt) {
     const grip = handbrake ? 0.62 : 1;
     car.body.velocity.x = Math.sin(car.yaw) * car.speed * grip;
     car.body.velocity.z = Math.cos(car.yaw) * car.speed * grip;
+    car.body.angularVelocity.set(0, 0, 0);
     car.body.wakeUp();
     if (Math.abs(car.body.position.x) > CITY_LIMIT + 9 ||
         Math.abs(car.body.position.z) > CITY_LIMIT + 9) {
@@ -1165,9 +1171,10 @@ function moveEffects(dt) {
 }
 
 function syncModels(dt) {
+  const playerRender = player.interpolatedPosition;
   if (!state.currentCar) {
-    world.actor.position.set(player.position.x, player.position.y - 0.62,
-      player.position.z);
+    world.actor.position.set(playerRender.x, playerRender.y - 0.62,
+      playerRender.z);
     const { head, arms, legs, tail } = world.actor.userData.rig;
     const speed = Math.hypot(player.velocity.x, player.velocity.z);
     const movement = Math.min(1, speed / 6);
@@ -1193,8 +1200,8 @@ function syncModels(dt) {
   const night = dayNight.isNight;
   for (const car of world.cars) {
     if (car.dead) continue;
-    car.mesh.position.set(car.body.position.x, car.body.position.y - 0.89,
-      car.body.position.z);
+    const carRender = car.body.interpolatedPosition;
+    car.mesh.position.set(carRender.x, carRender.y - 0.89, carRender.z);
     car.mesh.rotation.y = car.yaw;
     car.mesh.rotation.z = THREE.MathUtils.damp(car.mesh.rotation.z,
       state.currentCar === car ? -car.steer * Math.min(Math.abs(car.speed), 20) * 0.0025 : 0,
@@ -1214,7 +1221,12 @@ function syncModels(dt) {
 }
 
 function moveCamera(dt) {
-  const position = getPosition();
+  const source = state.currentCar ? state.currentCar.body.interpolatedPosition
+    : player.interpolatedPosition;
+  cameraAnchor.x = THREE.MathUtils.damp(cameraAnchor.x, source.x, 18, dt);
+  cameraAnchor.z = THREE.MathUtils.damp(cameraAnchor.z, source.z, 18, dt);
+  cameraAnchor.y = THREE.MathUtils.damp(cameraAnchor.y, source.y, 12, dt);
+  const position = cameraAnchor;
   const driving = Boolean(state.currentCar);
   const moving = driving ? Math.abs(state.currentCar.speed) > 1.2
     : Math.hypot(player.velocity.x, player.velocity.z) > 0.6;
@@ -1247,17 +1259,26 @@ function moveCamera(dt) {
   physics.raycastClosest(new CANNON.Vec3(viewTarget.x, viewTarget.y, viewTarget.z),
     new CANNON.Vec3(desiredCamera.x, desiredCamera.y, desiredCamera.z),
     { skipBackfaces: true }, ray);
+  const boomTarget = desiredCamera.distanceTo(viewTarget);
+  let clearBoom = boomTarget;
   if (ray.hasHit && ray.body.type === CANNON.Body.STATIC &&
       ray.body.shapes[0] instanceof CANNON.Box) {
-    const direction = desiredCamera.clone().sub(viewTarget).normalize();
-    desiredCamera.set(ray.hitPointWorld.x, ray.hitPointWorld.y, ray.hitPointWorld.z)
-      .addScaledVector(direction, -0.65);
+    cameraRayEnd.set(ray.hitPointWorld.x, ray.hitPointWorld.y, ray.hitPointWorld.z);
+    clearBoom = Math.max(1.6, viewTarget.distanceTo(cameraRayEnd) - 0.65);
+    state.cameraHit = true;
+  } else {
+    state.cameraHit = false;
   }
+  // snap in front of walls instantly, ease back out so grazing corners don't flicker
+  cameraBoom = clearBoom < cameraBoom ? clearBoom
+    : THREE.MathUtils.damp(cameraBoom, clearBoom, 5, dt);
+  desiredCamera.sub(viewTarget).setLength(Math.min(cameraBoom, boomTarget))
+    .add(viewTarget);
   state.cameraShake *= Math.exp(-dt * 9);
   desiredCamera.x += Math.sin(state.elapsed * 83) * state.cameraShake;
   desiredCamera.y += Math.sin(state.elapsed * 61) * state.cameraShake * 0.58;
-  cameraPosition.lerp(desiredCamera, Math.min(1, dt * 9));
-  cameraLook.lerp(viewTarget, Math.min(1, dt * 10));
+  cameraPosition.lerp(desiredCamera, 1 - Math.exp(-9 * dt));
+  cameraLook.lerp(viewTarget, 1 - Math.exp(-10 * dt));
   camera.position.copy(cameraPosition);
   camera.lookAt(cameraLook);
   const wantedFov = aiming ? 48 : state.currentCar ?
@@ -1844,6 +1865,12 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
       aiming: state.aiming, idleFor: state.elapsed - state.mouseMovedAt,
       wheelAngle: state.currentCar?.mesh.userData.wheels[0].rotation.x ?? null,
       carYaw: state.currentCar?.yaw ?? null,
+      carRender: state.currentCar ? {
+        x: state.currentCar.body.interpolatedPosition.x,
+        y: state.currentCar.body.interpolatedPosition.y,
+        z: state.currentCar.body.interpolatedPosition.z,
+        vx: state.currentCar.body.velocity.x,
+        vz: state.currentCar.body.velocity.z } : null,
       camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z,
         yaw: state.cameraYaw, rx: camera.rotation.x, ry: camera.rotation.y,
         rz: camera.rotation.z },
@@ -1852,6 +1879,34 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
       if (state.currentCar) exitCar(true);
       player.position.set(x, 0.7, z);
       player.velocity.set(0, 0, 0);
+    },
+    solo: () => {
+      for (const vehicle of world.traffic) {
+        physics.removeBody(vehicle.body);
+        scene.remove(vehicle.mesh);
+      }
+      world.traffic.length = 0;
+      for (const car of world.cars) {
+        if (car === state.currentCar || car.dead) continue;
+        car.body.position.set(0, -300, 0);
+        car.mesh.position.set(0, -300, 0);
+      }
+    },
+    placeCar: (x, z, yaw) => {
+      const car = state.currentCar;
+      if (!car) return false;
+      car.body.position.set(x, 0.9, z);
+      car.body.previousPosition.set(x, 0.9, z);
+      car.body.interpolatedPosition.set(x, 0.9, z);
+      car.body.velocity.set(0, 0, 0);
+      car.body.angularVelocity.set(0, 0, 0);
+      car.yaw = yaw;
+      car.body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yaw);
+      car.body.previousQuaternion.copy(car.body.quaternion);
+      car.mesh.position.set(x, 0.01, z);
+      car.mesh.rotation.y = yaw;
+      car.speed = 0;
+      return true;
     },
     setWanted: (level) => { state.wanted = level; state.wantedCooldown = 35; },
     info: () => ({ ...renderer.info.render, elapsed: state.elapsed,
