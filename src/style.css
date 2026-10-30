@@ -116,7 +116,9 @@ kbd { padding: 3px 7px; color: #253c3f; background: #ffda76; font: bold 12px sys
 .map-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .map-legend b { display: inline-block; height: 9px; width: 9px; border-radius: 50%; }
 .legend-player { background: #ffde72; }.legend-goal { background: #ee9079; }
+.legend-cast { background: #f0a03c; }
 .legend-shop { background: #8fd9b4; }.legend-garage { background: #91d7c1; }
+.map-hint { margin: 10px 0 0; text-align: center; font-size: 11px; color: #9fb8b2; }
 .mobile-controls { display: none; }
 @media (max-width: 700px) {
   .topbar { height: 58px; padding: 0 11px; }

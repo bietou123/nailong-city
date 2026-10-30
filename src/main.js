@@ -1519,6 +1519,8 @@ function drawMap(mapCanvas, expanded = false) {
   context.translate(size / 2 - position.x * scale * (expanded ? 0 : 1),
     size / 2 - position.z * scale * (expanded ? 0 : 1));
   context.scale(scale, scale);
+  // Markers keep a constant on-screen size regardless of the map zoom level.
+  const dot = (pixels) => pixels / scale;
   context.fillStyle = '#c7d4c7';
   context.fillRect(-300, -300, 600, 600);
   context.fillStyle = '#78bdc4';
@@ -1542,51 +1544,69 @@ function drawMap(mapCanvas, expanded = false) {
   }
   for (const shop of shops.shops) {
     context.beginPath();
-    context.arc(shop.x, shop.z, 4.6, 0, Math.PI * 2);
+    context.arc(shop.x, shop.z, dot(4), 0, Math.PI * 2);
     context.fillStyle = '#8fd9b4';
     context.fill();
-    context.lineWidth = 1.4;
+    context.lineWidth = dot(1.2);
     context.strokeStyle = '#f4fff8';
     context.stroke();
   }
   for (const unit of police.units()) {
     context.beginPath();
-    context.arc(unit.body.position.x, unit.body.position.z, 3.4, 0, Math.PI * 2);
+    context.arc(unit.body.position.x, unit.body.position.z, dot(3.4), 0, Math.PI * 2);
     context.fillStyle = '#5aa8ff';
     context.fill();
+  }
+  for (const person of world.cast) {
+    context.beginPath();
+    context.arc(person.x, person.z, dot(4.4), 0, Math.PI * 2);
+    context.fillStyle = '#f0a03c';
+    context.fill();
+    context.lineWidth = dot(1.3);
+    context.strokeStyle = '#293e43';
+    context.stroke();
+    if (expanded) {
+      context.font = `700 ${11 / scale}px "Microsoft YaHei", system-ui, sans-serif`;
+      context.textAlign = 'center';
+      context.fillStyle = '#20383c';
+      context.fillText(person.name, person.x, person.z - dot(8));
+    }
   }
   const target = stepTarget(state.progress);
   if (target) {
     context.beginPath();
-    context.setLineDash([4, 4]);
+    context.setLineDash([dot(6), dot(5)]);
     context.strokeStyle = '#ffe2a2';
-    context.lineWidth = 1.9;
+    context.lineWidth = dot(2);
     context.moveTo(position.x, position.z);
     context.lineTo(target.x, target.z);
     context.stroke();
     context.setLineDash([]);
     context.beginPath();
-    context.arc(target.x, target.z, 6, 0, Math.PI * 2);
+    context.arc(target.x, target.z, dot(7), 0, Math.PI * 2);
     context.fillStyle = '#e78873';
     context.fill();
-    context.lineWidth = 1.3;
+    context.lineWidth = dot(1.6);
     context.strokeStyle = '#fff7e4';
     context.stroke();
   }
   context.beginPath();
-  context.arc(GARAGE.x, GARAGE.z, 4.8, 0, Math.PI * 2);
+  context.arc(GARAGE.x, GARAGE.z, dot(4.4), 0, Math.PI * 2);
   context.fillStyle = '#91d7c1';
   context.fill();
+  context.lineWidth = dot(1.2);
+  context.strokeStyle = '#f4fff8';
+  context.stroke();
   context.translate(position.x, position.z);
   context.rotate(state.currentCar?.yaw ?? world.actor.rotation.y);
   context.beginPath();
-  context.moveTo(0, 7.5);
-  context.lineTo(-5.2, -5.8);
-  context.lineTo(5.2, -5.8);
+  context.moveTo(0, dot(10));
+  context.lineTo(-dot(7), -dot(7.6));
+  context.lineTo(dot(7), -dot(7.6));
   context.closePath();
   context.fillStyle = '#ffdf6c';
   context.fill();
-  context.lineWidth = 1.8;
+  context.lineWidth = dot(1.8);
   context.strokeStyle = '#293e43';
   context.stroke();
   context.restore();
@@ -1709,7 +1729,9 @@ function toggleMap() {
   state.mapOpen = opening;
   $('full-map').classList.toggle('hidden', !opening);
   if (opening) drawMap($('large-map'), true);
-  if (opening && document.pointerLockElement) document.exitPointerLock();
+  // The pointer lock stays on while the map is open: releasing it here means the
+  // browser refuses to re-lock on the same key press, so closing the map would
+  // leave the mouse dead until you clicked the scene again.
   keys.clear();
 }
 
@@ -1798,6 +1820,9 @@ function setupControls() {
   $('restart').addEventListener('click', resetGame);
   $('map-toggle').addEventListener('click', toggleMap);
   $('map-close').addEventListener('click', toggleMap);
+  $('full-map').addEventListener('pointerdown', (event) => {
+    if (!event.target.closest('.map-dialog')) toggleMap();
+  });
   $('shop-close').addEventListener('click', closeShop);
   $('radio-toggle').addEventListener('click', toggleRadio);
   $('volume').addEventListener('input', (event) => {
@@ -1811,13 +1836,13 @@ function setupControls() {
   window.addEventListener('keydown', (event) => {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']
       .includes(event.code)) event.preventDefault();
-    if (event.code === 'Escape') {
+    if (event.code === 'Escape' && !event.repeat) {
       if (state.shopOpen) { closeShop(); return; }
       if (state.mapOpen) toggleMap();
       else togglePause();
       return;
     }
-    if (event.code === 'KeyM') { toggleMap(); return; }
+    if (event.code === 'KeyM' && !event.repeat) { toggleMap(); return; }
     if (state.paused || state.mapOpen || state.shopOpen) return;
     startAudio();
     if (event.code === 'KeyE' && !event.repeat) interact();
