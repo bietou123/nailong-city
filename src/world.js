@@ -507,6 +507,7 @@ function wornMarking() {
   ctx.globalAlpha = 1;
   markingTexture = new THREE.CanvasTexture(canvas);
   markingTexture.colorSpace = THREE.SRGBColorSpace;
+  markingTexture.anisotropy = 8;
   return markingTexture;
 }
 

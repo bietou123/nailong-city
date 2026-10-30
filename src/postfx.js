@@ -66,13 +66,26 @@ const GradeShader = {
       float edge = smoothstep(0.36, 0.88, dist);
       color *= 1.0 - edge * vignette * 0.42;
 
-      color += (rand(vUv * 1024.0 + time) - 0.5) * grain;
+      float seed = floor(time * 12.0);
+      color += (rand(vUv * 1024.0 + seed) - 0.5) * grain;
       gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
     }
   `,
 };
 
 export function createPostFX(renderer, scene, camera) {
+  // antialias:true on the renderer only covers direct-to-canvas rendering. Every
+  // post-processed frame lands in the composer's render targets, so they must be
+  // multisampled themselves or all geometry edges crawl while the camera moves.
+  let samples = 0;
+  const makeTarget = (width, height) => new THREE.WebGLRenderTarget(
+    Math.max(1, Math.round(width)), Math.max(1, Math.round(height)), {
+      type: THREE.HalfFloatType,
+      samples,
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.3, 0.55, 0.86);
@@ -81,10 +94,21 @@ export function createPostFX(renderer, scene, camera) {
   const grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
 
+  function rebuildTargets() {
+    const width = composer._width * composer._pixelRatio;
+    const height = composer._height * composer._pixelRatio;
+    composer.reset(makeTarget(width, height));
+  }
+
   let quality = 'high';
   function applyQuality() {
+    const wanted = quality === 'high' ? 4 : quality === 'medium' ? 2 : 0;
+    if (wanted !== samples) {
+      samples = wanted;
+      rebuildTargets();
+    }
     bloom.enabled = quality === 'high';
-    grade.uniforms.grain.value = quality === 'high' ? 0.012 : 0.008;
+    grade.uniforms.grain.value = quality === 'high' ? 0.008 : 0.005;
     grade.uniforms.aberration.value = quality === 'high' ? 0.0016 : 0;
   }
   applyQuality();
@@ -98,7 +122,6 @@ export function createPostFX(renderer, scene, camera) {
     setSize(width, height, pixelRatio) {
       composer.setPixelRatio(pixelRatio);
       composer.setSize(width, height);
-      bloom.setSize(width * pixelRatio, height * pixelRatio);
     },
     render(dt, elapsed) {
       grade.uniforms.time.value = elapsed;

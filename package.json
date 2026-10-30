@@ -1,6 +1,6 @@
 {
   "name": "nailong-city",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "type": "module",
   "private": true,
   "description": "Third-person open-city crime sandbox starring a cheerful yellow dragon, with driving, gunplay, police chases, shops, day-night cycle and a five-mission story.",
@@ -40,7 +40,8 @@
       "assets/**/*",
       "LICENSE",
       "README.md",
-      "package.json"
+      "package.json",
+      "!node_modules/**/*"
     ],
     "asar": true,
     "win": {

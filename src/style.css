@@ -86,6 +86,7 @@ kbd { padding: 3px 7px; color: #253c3f; background: #ffda76; font: bold 12px sys
 .settings-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid #ffffff20; font-size: 13px; }
 .settings-row input { width: 52%; accent-color: #ffcf6b; }
 .settings-row select { border: 1px solid #8aa4a0; border-radius: 3px; color: white; background: #345255; padding: 5px 9px; }
+.settings-note { padding: 3px 0 12px; color: #90a8a2; font-size: 11px; font-variant-numeric: tabular-nums; }
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
 .stats-grid span { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 4px; background: #172e30; border-radius: 3px; font-size: 10px; color: #bcd2ca; }
 .stats-grid b { font-size: 19px; color: #ffd978; font-variant-numeric: tabular-nums; }

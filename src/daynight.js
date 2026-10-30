@@ -20,6 +20,34 @@ export function createDayNight({ scene, sun, hemisphere, fog, atmosphere, lamps,
   let hours = startHour;
   const mixColor = new THREE.Color();
   const sunColor = new THREE.Color();
+  const lightDir = new THREE.Vector3();
+  const lightRight = new THREE.Vector3();
+  const lightUp = new THREE.Vector3();
+  const lightFocus = new THREE.Vector3();
+
+  // Snap the shadow focus to whole shadow-map texels. Without this the texel grid
+  // slides under the world every frame and cast shadows shimmer while driving.
+  function shadowFocus(playerPosition, offset) {
+    const camera = sun.shadow.camera;
+    lightDir.copy(offset).normalize();
+    lightRight.set(0, 1, 0).cross(lightDir);
+    if (lightRight.lengthSq() < 1e-8) lightRight.set(1, 0, 0);
+    lightRight.normalize();
+    lightUp.crossVectors(lightDir, lightRight).normalize();
+    const texelX = (camera.right - camera.left) / Math.max(1, sun.shadow.mapSize.x);
+    const texelY = (camera.top - camera.bottom) / Math.max(1, sun.shadow.mapSize.y);
+    const u = playerPosition.x * lightRight.x + playerPosition.z * lightRight.z;
+    const v = playerPosition.x * lightUp.x + playerPosition.z * lightUp.z;
+    const w = playerPosition.x * lightDir.x + playerPosition.z * lightDir.z;
+    const su = Math.round(u / texelX) * texelX;
+    const sv = Math.round(v / texelY) * texelY;
+    return lightFocus.set(0, 0, 0)
+      .addScaledVector(lightRight, su)
+      .addScaledVector(lightUp, sv)
+      .addScaledVector(lightDir, w);
+  }
+
+  const lightOffset = new THREE.Vector3();
 
   function update(dt, playerPosition, cameraPosition = playerPosition) {
     hours = (hours + dt / DAY_LENGTH * 24) % 24;
@@ -29,10 +57,12 @@ export function createDayNight({ scene, sun, hemisphere, fog, atmosphere, lamps,
     const sunset = Math.max(0, 1 - Math.abs(height) * 2.2) * (1 - Math.max(0, -height) * 1.2);
     const night = 1 - day;
 
-    sun.position.set(playerPosition.x + Math.cos(angle) * 140,
-      Math.max(18 + night * 70, height * 150), playerPosition.z + Math.sin(angle) * 100);
-    sun.target.position.set(playerPosition.x, 0, playerPosition.z);
+    lightOffset.set(Math.cos(angle) * 140,
+      Math.max(18 + night * 70, height * 150), Math.sin(angle) * 100);
+    const focus = shadowFocus(playerPosition, lightOffset);
+    sun.target.position.copy(focus);
     sun.target.updateMatrixWorld();
+    sun.position.copy(focus).add(lightOffset);
     sun.intensity = 1.35 + day * 2.75;
     sunColor.copy(COLORS.nightSun).lerp(COLORS.daySun, day);
     if (sunset > 0.05) sunColor.lerp(COLORS.sunsetSun, Math.min(1, sunset * 0.9));

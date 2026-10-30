@@ -36,6 +36,12 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const postfx = createPostFX(renderer, scene, camera);
 let qualityLevel = 'high';
+let basePixelRatio = 1;
+let renderScale = 1;
+const frameGaps = new Float32Array(90);
+let gapCount = 0;
+let gapIndex = 0;
+let pacingAt = 0;
 
 function skyEnvironment() {
   const surface = document.createElement('canvas');
@@ -196,6 +202,11 @@ const cameraLook = new THREE.Vector3(0, 2, 5);
 const cameraAnchor = new THREE.Vector3(0, 0.7, 7);
 let cameraBoom = 12;
 const cameraRayEnd = new THREE.Vector3();
+const cameraDesired = new THREE.Vector3();
+const cameraViewTarget = new THREE.Vector3();
+const cameraRayFrom = new CANNON.Vec3();
+const cameraRayTo = new CANNON.Vec3();
+const cameraRay = new CANNON.RaycastResult();
 const route = new THREE.Group();
 const routeRing = new THREE.Mesh(new THREE.TorusGeometry(3, 0.16, 10, 40),
   new THREE.MeshBasicMaterial({ color: '#ffd064' }));
@@ -1244,7 +1255,7 @@ function moveCamera(dt) {
   const distance = state.cameraDistance * (state.currentCar ? 1.18 : aiming ? 0.55 : 1);
   const height = (state.currentCar ? 4.5 : 3.05) + state.cameraPitch * 2.4;
   const targetY = (state.currentCar ? 1.5 : 1.25) + state.cameraPitch * 3.4;
-  const desiredCamera = new THREE.Vector3(position.x + Math.sin(state.cameraYaw) *
+  const desiredCamera = cameraDesired.set(position.x + Math.sin(state.cameraYaw) *
     distance, position.y + height, position.z + Math.cos(state.cameraYaw) * distance);
   const shoulder = driving ? 0.3 : aiming ? 0.9 : 0.6;
   desiredCamera.x += Math.cos(state.cameraYaw) * shoulder;
@@ -1253,12 +1264,12 @@ function moveCamera(dt) {
     CITY_LIMIT + 40);
   desiredCamera.z = THREE.MathUtils.clamp(desiredCamera.z, -CITY_LIMIT - 55,
     CITY_LIMIT + 40);
-  const viewTarget = new THREE.Vector3(position.x, targetY + (position.y - 0.62),
-    position.z);
-  const ray = new CANNON.RaycastResult();
-  physics.raycastClosest(new CANNON.Vec3(viewTarget.x, viewTarget.y, viewTarget.z),
-    new CANNON.Vec3(desiredCamera.x, desiredCamera.y, desiredCamera.z),
-    { skipBackfaces: true }, ray);
+  const viewTarget = cameraViewTarget.set(position.x,
+    targetY + (position.y - 0.62), position.z);
+  const ray = cameraRay;
+  cameraRayFrom.set(viewTarget.x, viewTarget.y, viewTarget.z);
+  cameraRayTo.set(desiredCamera.x, desiredCamera.y, desiredCamera.z);
+  physics.raycastClosest(cameraRayFrom, cameraRayTo, { skipBackfaces: true }, ray);
   const boomTarget = desiredCamera.distanceTo(viewTarget);
   let clearBoom = boomTarget;
   if (ray.hasHit && ray.body.type === CANNON.Body.STATIC &&
@@ -1517,6 +1528,18 @@ function missionLabel(step) {
   return step.text;
 }
 
+function updatePerfNote() {
+  if (gapCount < 10 || $('pause-screen').classList.contains('hidden')) return;
+  let sum = 0;
+  const take = Math.min(gapCount, 30);
+  for (let index = 0; index < take; index++) {
+    sum += frameGaps[(gapIndex - 1 - index + frameGaps.length) % frameGaps.length];
+  }
+  const fps = sum > 0 ? 1000 * take / sum : 0;
+  $('perf-note').textContent =
+    `帧率 ${fps.toFixed(0)} · 渲染倍率 ${Math.round(renderScale * 100)}%`;
+}
+
 function updateUI() {
   const position = getPosition();
   const mission = currentMission(state.progress);
@@ -1580,6 +1603,7 @@ function updateUI() {
   $('radio-glyph').textContent = audio.radioOn ? '♫' : '♪';
   drawMap($('minimap'));
   if (state.mapOpen) drawMap($('large-map'), true);
+  updatePerfNote();
 }
 
 function closePanels() {
@@ -1645,8 +1669,10 @@ function resetGame() {
 function updateQuality() {
   const option = $('quality').value;
   qualityLevel = option;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1,
-    option === 'high' ? 1.5 : option === 'medium' ? 1.0 : 0.65));
+  basePixelRatio = Math.min(window.devicePixelRatio || 1,
+    option === 'high' ? 1.25 : option === 'medium' ? 1.0 : 0.65);
+  renderScale = 1;
+  renderer.setPixelRatio(basePixelRatio);
   renderer.shadowMap.enabled = option !== 'low';
   if (option === 'high') sun.shadow.mapSize.set(2048, 2048);
   else sun.shadow.mapSize.set(1024, 1024);
@@ -1838,13 +1864,42 @@ setTimeout(() => toast('点击画面锁定鼠标，移动鼠标转动镜头', 5)
 
 let lastFrame = performance.now();
 let uiAt = 0;
+
+// Drop internal resolution when frame pacing slips so motion stays smooth on weaker
+// GPUs, then claw it back slowly once there is headroom again. A high median alone is
+// not judder: what reads as shaking is the *mixed* 16.7/33.3 ms pattern, so the long
+// frame ratio is what actually drives the downscale.
+function tuneRenderScale(now, gapMs) {
+  frameGaps[gapIndex] = gapMs;
+  gapIndex = (gapIndex + 1) % frameGaps.length;
+  gapCount = Math.min(gapCount + 1, frameGaps.length);
+  if (gapCount < 60 || document.hidden || now - pacingAt < 1200) return;
+  pacingAt = now;
+  const sorted = Array.from(frameGaps.subarray(0, gapCount)).sort((a, b) => a - b);
+  const median = sorted[sorted.length >> 1];
+  if (median > 200) return;
+  let long = 0;
+  for (const gap of sorted) if (gap > median * 1.5) long++;
+  const longRatio = long / sorted.length;
+  let next = renderScale;
+  if (longRatio > 0.12 || median > 22) next -= 0.1;
+  else if (longRatio < 0.04 && median < 15) next += 0.05;
+  next = THREE.MathUtils.clamp(next, 0.6, 1);
+  if (Math.abs(next - renderScale) < 0.02) return;
+  renderScale = next;
+  renderer.setPixelRatio(basePixelRatio * renderScale);
+  resize();
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   state.frames++;
-  const dt = Math.max(0, Math.min(0.1, (now - lastFrame) / 1000));
+  const gap = Math.max(0, now - lastFrame);
+  const dt = Math.min(0.1, gap / 1000);
   lastFrame = now;
   if (!state.paused && !state.mapOpen && !state.shopOpen) updateWorld(dt);
   renderFrame(dt);
+  tuneRenderScale(now, gap);
   if (now - uiAt > 130) { updateUI(); uiAt = now; }
 }
 requestAnimationFrame(frame);
@@ -1875,6 +1930,8 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
         yaw: state.cameraYaw, rx: camera.rotation.x, ry: camera.rotation.y,
         rz: camera.rotation.z },
       police: police.count(), pressed: [...keys] }),
+    render: () => ({ quality: qualityLevel, pixelRatio: renderer.getPixelRatio(),
+      renderScale, samples: postfx.composer.renderTarget1.samples }),
     teleport: (x, z) => {
       if (state.currentCar) exitCar(true);
       player.position.set(x, 0.7, z);
